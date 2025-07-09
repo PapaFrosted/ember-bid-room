@@ -1,19 +1,39 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+};
+
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+console.log('Auction WebSocket function starting...');
 
 // Store connected clients for broadcasting
 const connectedClients = new Map<string, Set<WebSocket>>();
 
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  console.log('Incoming request:', req.method, req.url);
   const { headers } = req;
   const upgradeHeader = headers.get("upgrade") || "";
 
+  console.log('Upgrade header:', upgradeHeader);
+
   if (upgradeHeader.toLowerCase() !== "websocket") {
-    return new Response("Expected WebSocket connection", { status: 400 });
+    console.log('Not a WebSocket request, returning error');
+    return new Response("Expected WebSocket connection", { 
+      status: 400, 
+      headers: corsHeaders 
+    });
   }
 
   const { socket, response } = Deno.upgradeWebSocket(req);
@@ -39,18 +59,19 @@ serve(async (req) => {
   };
 
   socket.onopen = () => {
-    console.log("WebSocket connection opened");
+    console.log("WebSocket connection opened successfully");
   };
 
   socket.onmessage = async (event) => {
     try {
+      console.log('Received WebSocket message:', event.data);
       const message = JSON.parse(event.data);
       
       switch (message.type) {
         case "join_auction":
           auctionId = message.auctionId;
           userId = message.userId;
-          console.log(`User ${userId} joined auction ${auctionId}`);
+          console.log(`User ${userId} joining auction ${auctionId}`);
           
           // Add client to room
           if (!connectedClients.has(auctionId)) {
@@ -77,6 +98,7 @@ serve(async (req) => {
             .single();
             
           if (auction) {
+            console.log(`Sending auction status for ${auctionId}`);
             socket.send(JSON.stringify({
               type: "auction_status",
               auction: auction,
@@ -84,11 +106,14 @@ serve(async (req) => {
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               ).slice(0, 10) // Latest 10 bids
             }));
+          } else {
+            console.log(`Auction ${auctionId} not found`);
           }
           break;
 
         case "place_bid":
           if (!auctionId || !userId) {
+            console.log('Bid attempt without joining auction first');
             socket.send(JSON.stringify({
               type: "error",
               message: "Must join auction first"
@@ -97,6 +122,7 @@ serve(async (req) => {
           }
 
           const { bidAmount } = message;
+          console.log(`User ${userId} placing bid of ${bidAmount} in auction ${auctionId}`);
           
           // Get user profile
           const { data: profile } = await supabase
@@ -156,6 +182,7 @@ serve(async (req) => {
             .single();
 
           if (bidError) {
+            console.error('Error placing bid:', bidError);
             socket.send(JSON.stringify({
               type: "error",
               message: "Failed to place bid"
@@ -164,7 +191,7 @@ serve(async (req) => {
           }
 
           // Update auction current_bid
-          await supabase
+          const { error: updateError } = await supabase
             .from('auctions')
             .update({ 
               current_bid: bidAmount,
@@ -172,6 +199,11 @@ serve(async (req) => {
             })
             .eq('id', auctionId);
 
+          if (updateError) {
+            console.error('Error updating auction:', updateError);
+          }
+
+          console.log(`Broadcasting new bid to room ${auctionId}`);
           // Broadcast new bid to all clients in this auction room
           broadcastToRoom(auctionId, {
             type: "new_bid",
@@ -183,6 +215,7 @@ serve(async (req) => {
 
         case "send_message":
           if (!auctionId || !userId) {
+            console.log('Chat message attempt without joining auction first');
             socket.send(JSON.stringify({
               type: "error",
               message: "Must join auction first"
@@ -191,6 +224,7 @@ serve(async (req) => {
           }
 
           const { message: chatMessage } = message;
+          console.log(`User ${userId} sending chat message in auction ${auctionId}`);
           
           // Get user profile for chat
           const { data: userProfile } = await supabase
@@ -234,7 +268,7 @@ serve(async (req) => {
   };
 
   socket.onerror = (error) => {
-    console.error("WebSocket error:", error);
+    console.error("WebSocket server error:", error);
   };
 
   return response;

@@ -113,22 +113,25 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   useEffect(() => {
     if (!user || !auctionId) return;
 
-    // Try to connect to WebSocket (optional enhancement)
+    // Try to connect to WebSocket with proper URL format
     try {
-      const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.supabase.co/functions/v1/auction-websocket`);
+      console.log('Attempting WebSocket connection...');
+      const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.functions.supabase.co/auction-websocket`);
       
       websocket.onopen = () => {
-        console.log('WebSocket connected successfully');
+        console.log('WebSocket connected successfully to auction room');
         setIsConnected(true);
         setWs(websocket);
         setActiveUsers(1); // At least this user is active
         
         // Join the auction room
-        websocket.send(JSON.stringify({
+        const joinMessage = {
           type: 'join_auction',
           auctionId,
           userId: user.id
-        }));
+        };
+        console.log('Sending join message:', joinMessage);
+        websocket.send(JSON.stringify(joinMessage));
       };
 
       websocket.onmessage = (event) => {
@@ -177,16 +180,28 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       };
 
       websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket connection error:', error);
+        console.error('Failed to connect to WebSocket URL:', `wss://irnlrgnitkabszykuhxh.functions.supabase.co/auction-websocket`);
         setIsConnected(false);
+        toast({
+          title: "Connection Issue",
+          description: "Unable to connect to live auction room. Bids will still work in offline mode.",
+          variant: "destructive",
+        });
       };
 
       return () => {
         websocket.close();
       };
     } catch (error) {
-      console.error('WebSocket connection failed:', error);
+      console.error('WebSocket initialization failed:', error);
+      console.error('Error details:', error.message);
       setIsConnected(false);
+      toast({
+        title: "WebSocket Error",
+        description: `Failed to initialize WebSocket connection: ${error.message}`,
+        variant: "destructive",
+      });
     }
   }, [user, auctionId, toast]);
 
@@ -394,7 +409,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               <Alert className="mb-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {ws ? "Connecting to live auction room..." : "Using offline mode - bids will still work"}
+                  {ws ? "Connecting to live auction room..." : "WebSocket connection failed - using offline mode. Bids will still work but you won't see real-time updates."}
                 </AlertDescription>
               </Alert>
             )}
