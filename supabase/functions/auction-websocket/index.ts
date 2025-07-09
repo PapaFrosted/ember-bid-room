@@ -27,12 +27,15 @@ const connectedClients = new Map<string, Set<{ socket: WebSocket, userId: string
 // Broadcasting helper with improved logging
 function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {
   const clients = connectedClients.get(roomId);
-  console.log(`Broadcasting to room ${roomId}:`, message);
+  console.log(`=== BROADCASTING TO ROOM ${roomId} ===`);
+  console.log(`Message to broadcast:`, JSON.stringify(message, null, 2));
   console.log(`Room has ${clients?.size || 0} connected clients`);
   
   if (clients) {
     const messageStr = JSON.stringify(message);
     let broadcastCount = 0;
+    
+    console.log(`Connected clients in room:`, Array.from(clients).map(({ userId }) => userId));
     
     clients.forEach(({ socket, userId }) => {
       // Skip the sender if excludeUserId is provided
@@ -41,22 +44,24 @@ function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {
         return;
       }
       
+      console.log(`Attempting to send to user ${userId}, socket state: ${socket.readyState}`);
+      
       if (socket.readyState === WebSocket.OPEN) {
         try {
           socket.send(messageStr);
           broadcastCount++;
-          console.log(`Message sent to user ${userId}`);
+          console.log(`✅ Message successfully sent to user ${userId}`);
         } catch (error) {
-          console.error(`Error sending message to user ${userId}:`, error);
+          console.error(`❌ Error sending message to user ${userId}:`, error);
         }
       } else {
-        console.log(`Skipping closed connection for user ${userId}`);
+        console.log(`⚠️ Skipping closed connection for user ${userId} (state: ${socket.readyState})`);
       }
     });
     
-    console.log(`Successfully broadcast to ${broadcastCount} clients`);
+    console.log(`=== BROADCAST COMPLETE: ${broadcastCount}/${clients.size} clients reached ===`);
   } else {
-    console.log(`No clients found in room ${roomId}`);
+    console.log(`❌ No clients found in room ${roomId}`);
   }
 }
 
@@ -198,14 +203,30 @@ async function getUserProfile(userId: string, selectFields = 'id') {
 
 // Improved chat message handler
 async function createChatMessage(userId: string, messageText: string) {
-  const userProfile = await getUserProfile(userId, 'full_name');
+  console.log(`Creating chat message for user ${userId}: "${messageText}"`);
   
-  return {
-    id: crypto.randomUUID(),
-    user: userProfile?.full_name || "Anonymous",
-    text: messageText,
-    timestamp: new Date().toISOString()
-  };
+  try {
+    const userProfile = await getUserProfile(userId, 'full_name');
+    console.log(`User profile fetched for ${userId}:`, userProfile);
+    
+    const message = {
+      id: crypto.randomUUID(),
+      user: userProfile?.full_name || "Anonymous",
+      text: messageText,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`Created chat message:`, message);
+    return message;
+  } catch (error) {
+    console.error(`Error creating chat message for user ${userId}:`, error);
+    return {
+      id: crypto.randomUUID(),
+      user: "Anonymous",
+      text: messageText,
+      timestamp: new Date().toISOString()
+    };
+  }
 }
 
 // Message handlers with improved logging
