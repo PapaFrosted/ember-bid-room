@@ -21,39 +21,69 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 console.log('Supabase client created successfully');
 
-// Store connected clients for broadcasting
-const connectedClients = new Map<string, Set<WebSocket>>();
+// Store connected clients for broadcasting with user info
+const connectedClients = new Map<string, Set<{ socket: WebSocket, userId: string }>>();
 
-// Broadcasting helper
-function broadcastToRoom(roomId: string, message: any) {
+// Broadcasting helper with improved logging
+function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {
   const clients = connectedClients.get(roomId);
+  console.log(`Broadcasting to room ${roomId}:`, message);
+  console.log(`Room has ${clients?.size || 0} connected clients`);
+  
   if (clients) {
     const messageStr = JSON.stringify(message);
-    clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
+    let broadcastCount = 0;
+    
+    clients.forEach(({ socket, userId }) => {
+      // Skip the sender if excludeUserId is provided
+      if (excludeUserId && userId === excludeUserId) {
+        console.log(`Skipping broadcast to sender ${userId}`);
+        return;
+      }
+      
+      if (socket.readyState === WebSocket.OPEN) {
         try {
-          client.send(messageStr);
+          socket.send(messageStr);
+          broadcastCount++;
+          console.log(`Message sent to user ${userId}`);
         } catch (error) {
-          console.error("Error sending message to client:", error);
+          console.error(`Error sending message to user ${userId}:`, error);
         }
+      } else {
+        console.log(`Skipping closed connection for user ${userId}`);
       }
     });
+    
+    console.log(`Successfully broadcast to ${broadcastCount} clients`);
+  } else {
+    console.log(`No clients found in room ${roomId}`);
   }
 }
 
-// Connection management
-function addClientToRoom(auctionId: string, socket: WebSocket) {
+// Connection management with user tracking
+function addClientToRoom(auctionId: string, socket: WebSocket, userId: string) {
   if (!connectedClients.has(auctionId)) {
     connectedClients.set(auctionId, new Set());
   }
-  connectedClients.get(auctionId)!.add(socket);
+  connectedClients.get(auctionId)!.add({ socket, userId });
+  console.log(`User ${userId} added to room ${auctionId}. Room now has ${connectedClients.get(auctionId)!.size} clients`);
 }
 
-function removeClientFromRoom(auctionId: string, socket: WebSocket) {
+function removeClientFromRoom(auctionId: string, socket: WebSocket, userId: string) {
   if (connectedClients.has(auctionId)) {
-    connectedClients.get(auctionId)!.delete(socket);
-    if (connectedClients.get(auctionId)!.size === 0) {
+    const clients = connectedClients.get(auctionId)!;
+    // Find and remove the specific client
+    for (const client of clients) {
+      if (client.socket === socket && client.userId === userId) {
+        clients.delete(client);
+        console.log(`User ${userId} removed from room ${auctionId}. Room now has ${clients.size} clients`);
+        break;
+      }
+    }
+    
+    if (clients.size === 0) {
       connectedClients.delete(auctionId);
+      console.log(`Room ${auctionId} deleted - no more clients`);
     }
   }
 }
@@ -166,7 +196,7 @@ async function getUserProfile(userId: string, selectFields = 'id') {
   return profile;
 }
 
-// Chat message handler
+// Improved chat message handler
 async function createChatMessage(userId: string, messageText: string) {
   const userProfile = await getUserProfile(userId, 'full_name');
   
@@ -178,16 +208,16 @@ async function createChatMessage(userId: string, messageText: string) {
   };
 }
 
-// Message handlers
+// Message handlers with improved logging
 async function handleJoinAuction(socket: WebSocket, auctionId: string, userId: string) {
   console.log(`User ${userId} joining auction ${auctionId}`);
   
-  addClientToRoom(auctionId, socket);
+  addClientToRoom(auctionId, socket, userId);
   
   const auction = await fetchAuctionStatus(auctionId);
   
   if (auction) {
-    console.log(`Sending auction status for ${auctionId}`);
+    console.log(`Sending auction status for ${auctionId} to user ${userId}`);
     socket.send(JSON.stringify({
       type: "auction_status",
       auction: auction,
@@ -238,14 +268,16 @@ async function handlePlaceBid(socket: WebSocket, auctionId: string, userId: stri
   });
 }
 
+// Fixed chat message handler - broadcast to ALL clients including sender
 async function handleSendMessage(socket: WebSocket, auctionId: string, userId: string, messageText: string) {
   console.log(`User ${userId} sending chat message in auction ${auctionId}: "${messageText}"`);
   
   const chatMessageObj = await createChatMessage(userId, messageText);
   
-  console.log(`Broadcasting chat message to room ${auctionId}:`, chatMessageObj);
+  console.log(`Broadcasting chat message to ALL clients in room ${auctionId}:`, chatMessageObj);
   console.log(`Current clients in room ${auctionId}:`, connectedClients.get(auctionId)?.size || 0);
   
+  // Broadcast to ALL clients (including sender) - don't exclude anyone
   broadcastToRoom(auctionId, {
     type: "chat_message",
     message: chatMessageObj
@@ -361,8 +393,8 @@ serve(async (req) => {
     socket.onclose = () => {
       console.log(`User ${userId} disconnected from auction ${auctionId}`);
       
-      if (auctionId) {
-        removeClientFromRoom(auctionId, socket);
+      if (auctionId && userId) {
+        removeClientFromRoom(auctionId, socket, userId);
       }
     };
 

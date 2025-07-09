@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,7 +36,6 @@ interface ChatMessage {
   timestamp: string;
 }
 
-
 interface Auction {
   id: string;
   title: string;
@@ -71,7 +69,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const maxReconnectAttempts = 3;
 
-  // Fetch initial auction data directly from Supabase
   const fetchAuctionData = async () => {
     try {
       const { data: auctionData, error } = await supabase
@@ -116,7 +113,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     fetchAuctionData();
   }, [auctionId, toast]);
 
-  // Enhanced WebSocket connection with reconnection logic
+  // Enhanced WebSocket connection with improved chat handling
   const connectWebSocket = async () => {
     if (!user || !auctionId) return;
 
@@ -147,6 +144,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       websocket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          console.log('Received WebSocket message:', message);
           
           switch (message.type) {
             case 'auction_status':
@@ -172,6 +170,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               break;
               
             case 'error':
+              console.error('WebSocket error:', message.message);
               toast({
                 title: "Error",
                 description: message.message,
@@ -180,9 +179,18 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               break;
               
             case 'chat_message':
-              console.log('Received chat message:', message.message);
-              // Add all incoming chat messages (WebSocket broadcasts to everyone including sender)
-              setChatMessages(prev => [...prev, message.message]);
+              console.log('Received chat message from WebSocket:', message.message);
+              // Add the message directly from WebSocket broadcast - server handles all distribution
+              setChatMessages(prev => {
+                // Check if message already exists (prevent duplicates)
+                const messageExists = prev.some(msg => msg.id === message.message.id);
+                if (messageExists) {
+                  console.log('Message already exists, skipping:', message.message.id);
+                  return prev;
+                }
+                console.log('Adding new chat message:', message.message);
+                return [...prev, message.message];
+              });
               break;
           }
         } catch (error) {
@@ -249,7 +257,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     };
   }, [user, auctionId]);
 
-  // Periodic polling as fallback for offline mode
   useEffect(() => {
     if (!isConnected && auction) {
       const pollInterval = setInterval(() => {
@@ -359,10 +366,13 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     }
   };
 
+  // Improved chat message sending - only send via WebSocket, let server handle broadcast
   const handleSendMessage = async () => {
     if (!chatMessage.trim()) return;
 
-    // Send via WebSocket if connected
+    console.log('Sending chat message:', chatMessage.trim());
+
+    // Send via WebSocket if connected - let server handle all broadcasting
     if (ws && connectionStatus === 'connected') {
       console.log('Sending chat message via WebSocket:', chatMessage.trim());
       ws.send(JSON.stringify({
@@ -371,7 +381,8 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       }));
       setChatMessage('');
     } else {
-      // Fallback for offline mode - show only locally
+      // Fallback for offline mode - show only locally (no sync with other users)
+      console.log('WebSocket not connected, adding message locally only');
       const { data: userProfile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -387,9 +398,14 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
 
       setChatMessages(prev => [...prev, newMessage]);
       setChatMessage('');
+      
+      toast({
+        title: "Offline Mode",
+        description: "Message sent locally only - won't sync with other users",
+        variant: "default",
+      });
     }
   };
-
 
   const formatTimeRemaining = (endTime: string) => {
     const end = new Date(endTime).getTime();
@@ -432,7 +448,18 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Bidding Section */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Auction Status */}
+        {/* Connection Status Debug Info */}
+        {connectionStatus === 'connected' && (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="pt-4">
+              <div className="flex items-center space-x-2 text-green-700">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium">Connected to live auction room</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -481,7 +508,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
           </CardContent>
         </Card>
 
-        {/* Bidding Controls */}
         <Card>
           <CardHeader>
             <CardTitle>Place Your Bid</CardTitle>
@@ -543,7 +569,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
           </CardContent>
         </Card>
 
-        {/* Bid History */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Bids</CardTitle>
@@ -596,7 +621,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               <MessageCircle className="h-5 w-5" />
               <span>Live Chat</span>
               {connectionStatus === 'connected' && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
                   Live
                 </Badge>
               )}
