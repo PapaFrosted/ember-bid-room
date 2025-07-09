@@ -60,6 +60,27 @@ const AuctionDetails = () => {
   const [loading, setLoading] = useState(true);
   const [isWatching, setIsWatching] = useState(false);
 
+  // Dynamic status calculation based on current time
+  const getDynamicStatus = (auctionData: AuctionDetails) => {
+    if (auctionData.status === 'draft' || auctionData.status === 'cancelled') {
+      return auctionData.status;
+    }
+
+    const now = new Date();
+    const start = new Date(auctionData.start_time);
+    const end = new Date(auctionData.end_time);
+
+    if (now < start) {
+      return 'upcoming';
+    } else if (now > end) {
+      return 'ended';
+    } else if (now >= start && now <= end) {
+      return 'live';
+    }
+
+    return auctionData.status;
+  };
+
   useEffect(() => {
     if (id) {
       fetchAuctionDetails();
@@ -218,6 +239,9 @@ const AuctionDetails = () => {
     );
   }
 
+  // Calculate dynamic status
+  const dynamicStatus = getDynamicStatus(auction);
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -237,7 +261,7 @@ const AuctionDetails = () => {
           <div>
             <h1 className="text-3xl font-bold mb-2">{auction.title}</h1>
             <div className="flex items-center space-x-4">
-              {getStatusBadge(auction.status)}
+              {getStatusBadge(dynamicStatus)}
               <Badge variant="outline">
                 <Tag className="h-3 w-3 mr-1" />
                 {auction.category.name}
@@ -260,7 +284,7 @@ const AuctionDetails = () => {
         </div>
 
         {/* Live Bidding Room */}
-        {auction.status === 'live' && user && (
+        {dynamicStatus === 'live' && user && (
           <div className="mb-8">
             <BiddingRoom auctionId={auction.id} />
           </div>
@@ -363,7 +387,7 @@ const AuctionDetails = () => {
                   </div>
                 </div>
 
-                {auction.status === 'upcoming' && (
+                {dynamicStatus === 'upcoming' && (
                   <div className="text-center pt-4">
                     <Button 
                       onClick={toggleWatch}
@@ -375,7 +399,7 @@ const AuctionDetails = () => {
                   </div>
                 )}
 
-                {auction.status === 'live' && !user && (
+                {dynamicStatus === 'live' && !user && (
                   <div className="text-center pt-4">
                     <Button 
                       onClick={() => navigate('/auth')}
