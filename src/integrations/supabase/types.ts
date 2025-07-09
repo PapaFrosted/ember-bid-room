@@ -14,7 +14,409 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      auction_watchers: {
+        Row: {
+          auction_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          auction_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          auction_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auction_watchers_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auction_watchers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      auctions: {
+        Row: {
+          bid_increment: number | null
+          buy_now_price: number | null
+          category_id: string
+          condition: string | null
+          created_at: string
+          current_bid: number | null
+          description: string
+          dimensions: string | null
+          end_time: string
+          id: string
+          images: Json | null
+          is_anonymous_seller: boolean | null
+          is_featured: boolean | null
+          reserve_price: number | null
+          seller_id: string
+          shipping_cost: number | null
+          start_time: string
+          starting_bid: number
+          status: Database["public"]["Enums"]["auction_status"] | null
+          title: string
+          total_bids: number | null
+          total_watchers: number | null
+          updated_at: string
+          weight: string | null
+          winner_id: string | null
+        }
+        Insert: {
+          bid_increment?: number | null
+          buy_now_price?: number | null
+          category_id: string
+          condition?: string | null
+          created_at?: string
+          current_bid?: number | null
+          description: string
+          dimensions?: string | null
+          end_time: string
+          id?: string
+          images?: Json | null
+          is_anonymous_seller?: boolean | null
+          is_featured?: boolean | null
+          reserve_price?: number | null
+          seller_id: string
+          shipping_cost?: number | null
+          start_time: string
+          starting_bid: number
+          status?: Database["public"]["Enums"]["auction_status"] | null
+          title: string
+          total_bids?: number | null
+          total_watchers?: number | null
+          updated_at?: string
+          weight?: string | null
+          winner_id?: string | null
+        }
+        Update: {
+          bid_increment?: number | null
+          buy_now_price?: number | null
+          category_id?: string
+          condition?: string | null
+          created_at?: string
+          current_bid?: number | null
+          description?: string
+          dimensions?: string | null
+          end_time?: string
+          id?: string
+          images?: Json | null
+          is_anonymous_seller?: boolean | null
+          is_featured?: boolean | null
+          reserve_price?: number | null
+          seller_id?: string
+          shipping_cost?: number | null
+          start_time?: string
+          starting_bid?: number
+          status?: Database["public"]["Enums"]["auction_status"] | null
+          title?: string
+          total_bids?: number | null
+          total_watchers?: number | null
+          updated_at?: string
+          weight?: string | null
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auctions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auctions_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auctions_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bids: {
+        Row: {
+          amount: number
+          auction_id: string
+          bidder_id: string
+          created_at: string
+          id: string
+          is_auto_bid: boolean | null
+          max_bid: number | null
+          status: Database["public"]["Enums"]["bid_status"] | null
+        }
+        Insert: {
+          amount: number
+          auction_id: string
+          bidder_id: string
+          created_at?: string
+          id?: string
+          is_auto_bid?: boolean | null
+          max_bid?: number | null
+          status?: Database["public"]["Enums"]["bid_status"] | null
+        }
+        Update: {
+          amount?: number
+          auction_id?: string
+          bidder_id?: string
+          created_at?: string
+          id?: string
+          is_auto_bid?: boolean | null
+          max_bid?: number | null
+          status?: Database["public"]["Enums"]["bid_status"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bids_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bids_bidder_id_fkey"
+            columns: ["bidder_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          name: string
+          parent_id: string | null
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          name: string
+          parent_id?: string | null
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          name?: string
+          parent_id?: string | null
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          auction_id: string | null
+          created_at: string
+          email_sent: boolean | null
+          id: string
+          is_read: boolean | null
+          message: string
+          title: string
+          type: Database["public"]["Enums"]["notification_type"]
+          user_id: string
+        }
+        Insert: {
+          auction_id?: string | null
+          created_at?: string
+          email_sent?: boolean | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          title: string
+          type: Database["public"]["Enums"]["notification_type"]
+          user_id: string
+        }
+        Update: {
+          auction_id?: string | null
+          created_at?: string
+          email_sent?: boolean | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          title?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          auction_id: string
+          buyer_id: string
+          created_at: string
+          id: string
+          seller_id: string
+          shipping_address: Json | null
+          shipping_cost: number | null
+          status: string | null
+          stripe_payment_intent_id: string | null
+          total_amount: number
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          auction_id: string
+          buyer_id: string
+          created_at?: string
+          id?: string
+          seller_id: string
+          shipping_address?: Json | null
+          shipping_cost?: number | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          total_amount: number
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          auction_id?: string
+          buyer_id?: string
+          created_at?: string
+          id?: string
+          seller_id?: string
+          shipping_address?: Json | null
+          shipping_cost?: number | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          total_amount?: number
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_auction_id_fkey"
+            columns: ["auction_id"]
+            isOneToOne: false
+            referencedRelation: "auctions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          address: Json | null
+          avatar_url: string | null
+          bio: string | null
+          buyer_rating: number | null
+          created_at: string
+          full_name: string | null
+          id: string
+          is_verified: boolean | null
+          phone: string | null
+          seller_rating: number | null
+          total_purchases: number | null
+          total_sales: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address?: Json | null
+          avatar_url?: string | null
+          bio?: string | null
+          buyer_rating?: number | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          is_verified?: boolean | null
+          phone?: string | null
+          seller_rating?: number | null
+          total_purchases?: number | null
+          total_sales?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: Json | null
+          avatar_url?: string | null
+          bio?: string | null
+          buyer_rating?: number | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          is_verified?: boolean | null
+          phone?: string | null
+          seller_rating?: number | null
+          total_purchases?: number | null
+          total_sales?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +425,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      auction_status: "draft" | "upcoming" | "live" | "ended" | "cancelled"
+      bid_status: "active" | "outbid" | "winning" | "won" | "lost"
+      notification_type:
+        | "auction_starting"
+        | "outbid"
+        | "auction_ending"
+        | "auction_won"
+        | "auction_lost"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +559,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      auction_status: ["draft", "upcoming", "live", "ended", "cancelled"],
+      bid_status: ["active", "outbid", "winning", "won", "lost"],
+      notification_type: [
+        "auction_starting",
+        "outbid",
+        "auction_ending",
+        "auction_won",
+        "auction_lost",
+      ],
+    },
   },
 } as const

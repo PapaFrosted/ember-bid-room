@@ -1,8 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { Search, Gavel, User, Heart } from "lucide-react";
+import { Search, Gavel, User, Heart, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
-
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 export const Header = () => {
+  const { user, signOut } = useAuth();
+
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -32,14 +40,51 @@ export const Header = () => {
           <Button variant="ghost" size="icon">
             <Search className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon">
-            <Heart className="h-4 w-4" />
-          </Button>
-          <Button variant="outline">
-            <User className="h-4 w-4 mr-2" />
-            Sign In
-          </Button>
-          <Button variant="auction">Start Bidding</Button>
+          {user && (
+            <Button variant="ghost" size="icon">
+              <Heart className="h-4 w-4" />
+            </Button>
+          )}
+          
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <User className="h-4 w-4 mr-2" />
+                  Account
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard">Dashboard</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">Profile</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={signOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button variant="outline" asChild>
+              <Link to="/auth">
+                <User className="h-4 w-4 mr-2" />
+                Sign In
+              </Link>
+            </Button>
+          )}
+          
+          {user ? (
+            <Button variant="auction" asChild>
+              <Link to="/sell">List Item</Link>
+            </Button>
+          ) : (
+            <Button variant="auction" asChild>
+              <Link to="/auth">Start Bidding</Link>
+            </Button>
+          )}
         </div>
       </div>
     </header>
