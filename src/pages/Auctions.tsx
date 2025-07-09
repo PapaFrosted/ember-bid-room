@@ -116,8 +116,9 @@ const Auctions = () => {
       currentBid: auction.current_bid,
       startingBid: auction.starting_bid,
       imageUrl: auction.images?.[0] || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=300&fit=crop',
-      status: auction.status,
+      status: getDynamicStatus(auction),
       endTime: getTimeDisplay(auction),
+      startTime: auction.start_time,
       bidCount: auction.total_bids,
       watchers: auction.total_watchers,
       category: auction.category
@@ -127,12 +128,34 @@ const Auctions = () => {
     setLoading(false);
   };
 
+  // Dynamic status calculation based on current time
+  const getDynamicStatus = (auction: any) => {
+    if (auction.status === 'draft' || auction.status === 'cancelled') {
+      return auction.status;
+    }
+
+    const now = new Date();
+    const start = new Date(auction.start_time);
+    const end = new Date(auction.end_time);
+
+    if (now < start) {
+      return 'upcoming';
+    } else if (now > end) {
+      return 'ended';
+    } else if (now >= start && now <= end) {
+      return 'live';
+    }
+
+    return auction.status;
+  };
+
   const getTimeDisplay = (auction: any) => {
     const now = new Date();
     const startTime = new Date(auction.start_time);
     const endTime = new Date(auction.end_time);
+    const dynamicStatus = getDynamicStatus(auction);
 
-    if (auction.status === 'upcoming') {
+    if (dynamicStatus === 'upcoming') {
       const diff = startTime.getTime() - now.getTime();
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -141,7 +164,7 @@ const Auctions = () => {
       return `Starts in ${hours}h`;
     }
 
-    if (auction.status === 'live') {
+    if (dynamicStatus === 'live') {
       const diff = endTime.getTime() - now.getTime();
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
