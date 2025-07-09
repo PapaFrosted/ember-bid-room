@@ -6,16 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { CreditCard, Truck, Shield, ArrowLeft } from 'lucide-react';
+import { CreditCard, Truck, Shield, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-
-// Declare Razorpay global
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
 
 interface PaymentPageProps {
   auctionTitle: string;
@@ -31,6 +23,7 @@ const PaymentPage = () => {
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [auctionData, setAuctionData] = useState<PaymentPageProps | null>(null);
   const [shippingAddress, setShippingAddress] = useState({
     fullName: '',
@@ -42,18 +35,8 @@ const PaymentPage = () => {
     phone: ''
   });
 
-  // Load Razorpay script
-  const loadRazorpayScript = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  const handlePayment = async () => {
+  // Mock payment handler - simulates successful payment
+  const handleMockPayment = async () => {
     if (!user || !id) {
       toast({
         title: "Authentication Required",
@@ -63,111 +46,28 @@ const PaymentPage = () => {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      // Load Razorpay script
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        throw new Error("Failed to load Razorpay SDK");
-      }
-
-      // Create order on our backend
-      const { data: orderData, error: orderError } = await supabase.functions.invoke(
-        'create-razorpay-order',
-        {
-          body: {
-            auctionId: id,
-            amount: auctionData?.totalAmount || 0,
-            currency: 'INR'
-          }
-        }
-      );
-
-      if (orderError || !orderData) {
-        throw new Error(orderError?.message || "Failed to create payment order");
-      }
-
-      // Configure Razorpay options
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'EmberBid',
-        description: `Payment for: ${orderData.auction.title}`,
-        order_id: orderData.orderId,
-        prefill: {
-          name: shippingAddress.fullName || user.user_metadata?.full_name,
-          email: user.email,
-          contact: shippingAddress.phone
-        },
-        notes: {
-          shipping_address: JSON.stringify(shippingAddress)
-        },
-        theme: {
-          color: '#6366f1'
-        },
-        handler: async (response: any) => {
-          try {
-            // Verify payment on backend
-            const { data: verifyData, error: verifyError } = await supabase.functions.invoke(
-              'verify-razorpay-payment',
-              {
-                body: {
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                  paymentId: orderData.paymentId
-                }
-              }
-            );
-
-            if (verifyError || !verifyData?.success) {
-              throw new Error("Payment verification failed");
-            }
-
-            toast({
-              title: "Payment Successful! 🎉",
-              description: "Your payment has been processed successfully.",
-            });
-
-            // Redirect to success page
-            navigate(`/payment-success/${id}`);
-
-          } catch (error: any) {
-            console.error('Payment verification error:', error);
-            toast({
-              title: "Payment Verification Failed",
-              description: error.message || "Please contact support",
-              variant: "destructive",
-            });
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setLoading(false);
-            toast({
-              title: "Payment Cancelled",
-              description: "You can try again anytime",
-            });
-          }
-        }
-      };
-
-      // Open Razorpay checkout
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
-
-    } catch (error: any) {
-      console.error('Payment error:', error);
+    // Validate required shipping fields
+    if (!shippingAddress.fullName || !shippingAddress.phone || !shippingAddress.address || !shippingAddress.city) {
       toast({
-        title: "Payment Failed",
-        description: error.message || "Something went wrong",
+        title: "Missing Information",
+        description: "Please fill in all required shipping details",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+
+    // Simulate payment processing delay
+    setTimeout(() => {
+      setLoading(false);
+      setPaymentSuccess(true);
+      
+      toast({
+        title: "Payment Successful! 🎉",
+        description: "Your mock payment has been processed successfully.",
+      });
+    }, 2000);
   };
 
   const handleAddressChange = (field: string, value: string) => {
@@ -324,7 +224,7 @@ const PaymentPage = () => {
                     <span>Payment</span>
                   </CardTitle>
                   <CardDescription>
-                    Secure payment powered by Razorpay
+                    Mock payment for testing purposes
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -333,19 +233,50 @@ const PaymentPage = () => {
                     <span>SSL encrypted and secure</span>
                   </div>
 
-                  <Button
-                    onClick={handlePayment}
-                    disabled={loading || !shippingAddress.fullName || !shippingAddress.phone}
-                    className="w-full"
-                    variant="auction"
-                    size="lg"
-                  >
-                    {loading ? "Processing..." : `Pay ₹${auctionData?.totalAmount.toLocaleString()}`}
-                  </Button>
+                  {!paymentSuccess ? (
+                    <>
+                      <Button
+                        onClick={handleMockPayment}
+                        disabled={loading || !shippingAddress.fullName || !shippingAddress.phone}
+                        className="w-full"
+                        variant="auction"
+                        size="lg"
+                      >
+                        {loading ? "Processing..." : `Pay ₹${auctionData?.totalAmount.toLocaleString()}`}
+                      </Button>
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    By clicking Pay, you agree to our Terms of Service and Privacy Policy
-                  </p>
+                      <p className="text-xs text-muted-foreground text-center">
+                        By clicking Pay, you agree to our Terms of Service and Privacy Policy
+                      </p>
+                    </>
+                  ) : (
+                    <div className="text-center space-y-4">
+                      <div className="flex items-center justify-center space-x-2 text-green-600">
+                        <CheckCircle className="h-6 w-6" />
+                        <span className="text-lg font-semibold">Payment Successful!</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Your order has been confirmed. You will receive a confirmation email shortly.
+                      </p>
+                      <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                        <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2">Shipping Details:</h4>
+                        <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
+                          <p><strong>Name:</strong> {shippingAddress.fullName}</p>
+                          <p><strong>Phone:</strong> {shippingAddress.phone}</p>
+                          <p><strong>Address:</strong> {shippingAddress.address}</p>
+                          <p><strong>City:</strong> {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}</p>
+                          <p><strong>Country:</strong> {shippingAddress.country}</p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => navigate('/auctions')}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        Back to Auctions
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
