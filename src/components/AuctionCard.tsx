@@ -15,6 +15,7 @@ interface AuctionCardProps {
   imageUrl: string;
   status: 'draft' | 'upcoming' | 'live' | 'ended' | 'cancelled';
   endTime: string;
+  startTime?: string; // Add startTime prop
   bidCount: number;
   watchers: number;
   isWatched?: boolean;
@@ -28,7 +29,8 @@ export const AuctionCard = ({
   startingBid, 
   imageUrl, 
   status, 
-  endTime, 
+  endTime,
+  startTime,
   bidCount, 
   watchers,
   isWatched = false 
@@ -40,12 +42,35 @@ export const AuctionCard = ({
     return saved ? JSON.parse(saved) : isWatched;
   });
 
+  // Dynamic status calculation based on current time
+  const getDynamicStatus = () => {
+    if (status === 'draft' || status === 'cancelled') {
+      return status;
+    }
+
+    const now = new Date();
+    const start = startTime ? new Date(startTime) : null;
+    const end = new Date(endTime);
+
+    if (start && now < start) {
+      return 'upcoming';
+    } else if (now > end) {
+      return 'ended';
+    } else if (start && now >= start && now <= end) {
+      return 'live';
+    }
+
+    return status;
+  };
+
+  const dynamicStatus = getDynamicStatus();
+
   useEffect(() => {
     localStorage.setItem(watchedKey, JSON.stringify(watched));
   }, [watched, watchedKey]);
 
   const getStatusColor = () => {
-    switch (status) {
+    switch (dynamicStatus) {
       case 'live': return 'bg-auction-live';
       case 'upcoming': return 'bg-auction-upcoming';
       case 'ended': return 'bg-auction-ended';
@@ -56,7 +81,7 @@ export const AuctionCard = ({
   };
 
   const getStatusText = () => {
-    switch (status) {
+    switch (dynamicStatus) {
       case 'live': return 'LIVE';
       case 'upcoming': return 'UPCOMING';
       case 'ended': return 'ENDED';
@@ -75,7 +100,7 @@ export const AuctionCard = ({
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
         />
         <Badge 
-          className={`absolute top-3 left-3 ${getStatusColor()} text-white ${status === 'live' ? 'animate-pulse-slow' : ''}`}
+          className={`absolute top-3 left-3 ${getStatusColor()} text-white ${dynamicStatus === 'live' ? 'animate-pulse-slow' : ''}`}
         >
           {getStatusText()}
         </Badge>
@@ -122,27 +147,27 @@ export const AuctionCard = ({
       </CardContent>
 
       <CardFooter className="p-4 pt-0">
-        {status === 'live' && (
+        {dynamicStatus === 'live' && (
           <Button className="w-full" variant="bid" onClick={() => navigate(`/auction/${id}`)}>
             Place Bid
           </Button>
         )}
-        {status === 'upcoming' && (
+        {dynamicStatus === 'upcoming' && (
           <Button className="w-full" variant="outline" onClick={() => navigate(`/auction/${id}`)}>
             Watch Auction
           </Button>
         )}
-        {status === 'ended' && (
+        {dynamicStatus === 'ended' && (
           <Button className="w-full" variant="secondary" onClick={() => navigate(`/auction/${id}`)} disabled>
             Auction Ended
           </Button>
         )}
-        {status === 'draft' && (
+        {dynamicStatus === 'draft' && (
           <Button className="w-full" variant="outline" onClick={() => navigate(`/auction/${id}`)}>
             View Draft
           </Button>
         )}
-        {status === 'cancelled' && (
+        {dynamicStatus === 'cancelled' && (
           <Button className="w-full" variant="destructive" onClick={() => navigate(`/auction/${id}`)} disabled>
             Cancelled
           </Button>

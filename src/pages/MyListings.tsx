@@ -19,6 +19,7 @@ interface Auction {
   imageUrl: string;
   status: 'draft' | 'upcoming' | 'live' | 'ended' | 'cancelled';
   endTime: string;
+  startTime: string; // Add startTime
   bidCount: number;
   watchers: number;
   isWatched?: boolean;
@@ -90,18 +91,33 @@ const MyListings = () => {
         imageUrl: auction.images?.[0] || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=300&fit=crop',
         status: auction.status,
         endTime: getTimeDisplay(auction),
+        startTime: auction.start_time, // Include startTime
         bidCount: auction.total_bids || 0,
         watchers: auction.total_watchers || 0,
       }));
 
       setAuctions(transformedAuctions);
 
-      // Calculate stats
+      // Calculate stats using dynamic status
+      const now = new Date();
       const statsData = {
         total: transformedAuctions.length,
-        live: transformedAuctions.filter(a => a.status === 'live').length,
-        upcoming: transformedAuctions.filter(a => a.status === 'upcoming').length,
-        ended: transformedAuctions.filter(a => a.status === 'ended').length
+        live: transformedAuctions.filter(a => {
+          if (a.status === 'draft' || a.status === 'cancelled') return false;
+          const start = new Date(a.startTime);
+          const end = new Date(a.endTime);
+          return now >= start && now <= end;
+        }).length,
+        upcoming: transformedAuctions.filter(a => {
+          if (a.status === 'draft' || a.status === 'cancelled') return false;
+          const start = new Date(a.startTime);
+          return now < start;
+        }).length,
+        ended: transformedAuctions.filter(a => {
+          if (a.status === 'draft' || a.status === 'cancelled') return a.status === 'ended';
+          const end = new Date(a.endTime);
+          return now > end;
+        }).length
       };
       setStats(statsData);
 
@@ -117,7 +133,7 @@ const MyListings = () => {
     const startTime = new Date(auction.start_time);
     const endTime = new Date(auction.end_time);
 
-    if (auction.status === 'upcoming') {
+    if (auction.status === 'upcoming' || now < startTime) {
       const diff = startTime.getTime() - now.getTime();
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -126,7 +142,7 @@ const MyListings = () => {
       return `Starts in ${hours}h`;
     }
 
-    if (auction.status === 'live') {
+    if (now >= startTime && now <= endTime) {
       const diff = endTime.getTime() - now.getTime();
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -218,12 +234,6 @@ const MyListings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {auctions.map((auction) => (
               <div key={auction.id} className="relative">
-                <Badge 
-                  variant={getStatusBadgeVariant(auction.status)}
-                  className="absolute top-2 left-2 z-10 capitalize"
-                >
-                  {auction.status}
-                </Badge>
                 <AuctionCard {...auction} />
               </div>
             ))}
