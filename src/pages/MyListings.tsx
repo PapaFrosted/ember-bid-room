@@ -8,7 +8,19 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from "react-router-dom";
-import { Package, Plus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Package, Plus, StopCircle, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface Auction {
   id: string;
@@ -28,8 +40,10 @@ interface Auction {
 const MyListings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [endingAuction, setEndingAuction] = useState<string | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     live: 0,
@@ -164,6 +178,50 @@ const MyListings = () => {
     }
   };
 
+  const handleEndAuction = async (auctionId: string) => {
+    setEndingAuction(auctionId);
+    
+    try {
+      const { error } = await supabase
+        .from('auctions')
+        .update({ status: 'ended' })
+        .eq('id', auctionId);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to end auction",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Auction Ended",
+        description: "Your auction has been ended successfully",
+      });
+
+      // Refresh the auctions list
+      fetchMyAuctions();
+    } catch (error) {
+      console.error('Error ending auction:', error);
+      toast({
+        title: "Error",
+        description: "Failed to end auction",
+        variant: "destructive",
+      });
+    } finally {
+      setEndingAuction(null);
+    }
+  };
+
+  const isAuctionLive = (auction: Auction) => {
+    const now = new Date();
+    const start = new Date(auction.startTime);
+    const end = new Date(auction.endTime);
+    return auction.status !== 'ended' && auction.status !== 'cancelled' && now >= start && now <= end;
+  };
+
   if (!user) {
     return null;
   }
@@ -233,8 +291,51 @@ const MyListings = () => {
         ) : auctions.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {auctions.map((auction) => (
-              <div key={auction.id} className="relative">
+              <div key={auction.id} className="relative group">
                 <AuctionCard {...auction} />
+                
+                {/* End Auction Button for Live Auctions */}
+                {isAuctionLive(auction) && (
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          disabled={endingAuction === auction.id}
+                        >
+                          <StopCircle className="h-4 w-4 mr-1" />
+                          {endingAuction === auction.id ? 'Ending...' : 'End'}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center space-x-2">
+                            <AlertTriangle className="h-5 w-5 text-orange-500" />
+                            <span>End Auction Early?</span>
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to end "{auction.title}" early? This action cannot be undone. 
+                            {auction.bidCount > 0 && (
+                              <span className="block mt-2 font-medium text-orange-600">
+                                This auction has {auction.bidCount} bid(s). The highest bidder will win the auction.
+                              </span>
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={() => handleEndAuction(auction.id)}
+                            className="bg-destructive hover:bg-destructive/90"
+                          >
+                            End Auction
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
               </div>
             ))}
           </div>

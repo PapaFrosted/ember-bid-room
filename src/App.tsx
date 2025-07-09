@@ -14,6 +14,7 @@ import AuctionDetails from "./pages/AuctionDetails";
 import PaymentPage from "./pages/PaymentPage";
 import SellItem from "./pages/SellItem";
 import MyListings from "./pages/MyListings";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,8 @@ const App = () => (
             <Route path="/payment/:id" element={<PaymentPage />} />
             <Route path="/sell" element={<SellItem />} />
             <Route path="/my-listings" element={<MyListings />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/dashboard" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
