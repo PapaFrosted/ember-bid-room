@@ -179,19 +179,9 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               break;
               
             case 'chat_message':
-              // Only add message if it's not from the current user (to avoid duplicates)
-              // We check against the user's profile name from database
-              supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('user_id', user?.id)
-                .single()
-                .then(({ data: userProfile }) => {
-                  const messageFromSelf = message.message.user === userProfile?.full_name || message.message.user === "You";
-                  if (!messageFromSelf) {
-                    setChatMessages(prev => [...prev, message.message]);
-                  }
-                });
+              console.log('Received chat message:', message.message);
+              // Add all incoming chat messages (broadcasting handles not sending to sender)
+              setChatMessages(prev => [...prev, message.message]);
               break;
           }
         } catch (error) {
@@ -273,14 +263,18 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     if (!bidAmount || !auction) return;
 
     const amount = parseFloat(bidAmount);
-    const minimumBid = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000 
-      ? auction.starting_bid 
-      : auction.current_bid + auction.bid_increment;
+    
+    // First bid must be greater than starting_bid, subsequent bids must be greater than current_bid
+    const isFirstBid = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000;
+    const minimumBid = isFirstBid ? auction.starting_bid + 0.01 : auction.current_bid + 0.01;
 
-    if (amount < minimumBid) {
+    if (amount <= minimumBid) {
+      const errorMessage = isFirstBid 
+        ? `First bid must be greater than $${auction.starting_bid.toLocaleString()}`
+        : `Bid must be greater than current bid of $${auction.current_bid.toLocaleString()}`;
       toast({
         title: "Invalid Bid",
-        description: `Minimum bid is $${minimumBid.toLocaleString()}`,
+        description: errorMessage,
         variant: "destructive",
       });
       return;
@@ -368,32 +362,32 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   const handleSendMessage = async () => {
     if (!chatMessage.trim()) return;
 
-    // Get user profile for display name
-    const { data: userProfile } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('user_id', user?.id)
-      .single();
-
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      user: userProfile?.full_name || "You",
-      text: chatMessage.trim(),
-      timestamp: new Date().toISOString()
-    };
-
-    // Add message to local state immediately
-    setChatMessages(prev => [...prev, newMessage]);
-
-    // Send via WebSocket if connected, otherwise just show locally
+    // Send via WebSocket if connected
     if (ws && connectionStatus === 'connected') {
+      console.log('Sending chat message via WebSocket:', chatMessage.trim());
       ws.send(JSON.stringify({
         type: 'send_message',
         message: chatMessage.trim()
       }));
-    }
+      setChatMessage('');
+    } else {
+      // Fallback for offline mode - show only locally
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', user?.id)
+        .single();
 
-    setChatMessage('');
+      const newMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        user: userProfile?.full_name || "You",
+        text: chatMessage.trim(),
+        timestamp: new Date().toISOString()
+      };
+
+      setChatMessages(prev => [...prev, newMessage]);
+      setChatMessage('');
+    }
   };
 
 

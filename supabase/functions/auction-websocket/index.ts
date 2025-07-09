@@ -172,14 +172,17 @@ serve(async (req) => {
             return;
           }
 
-          const minimumBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000
-            ? currentAuction.starting_bid
-            : currentAuction.current_bid + currentAuction.bid_increment;
+          // Validate bid amount - first bid must be > starting_bid, subsequent bids must be > current_bid
+          const isFirstBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000;
+          const minimumRequired = isFirstBid ? currentAuction.starting_bid : currentAuction.current_bid;
           
-          if (bidAmount < minimumBid) {
+          if (bidAmount <= minimumRequired) {
+            const errorMessage = isFirstBid 
+              ? `First bid must be greater than $${currentAuction.starting_bid}`
+              : `Bid must be greater than current bid of $${currentAuction.current_bid}`;
             socket.send(JSON.stringify({
               type: "error",
-              message: `Minimum bid is $${minimumBid}`
+              message: errorMessage
             }));
             return;
           }
@@ -248,7 +251,7 @@ serve(async (req) => {
           }
 
           const { message: chatMessage } = message;
-          console.log(`User ${userId} sending chat message in auction ${auctionId}`);
+          console.log(`User ${userId} sending chat message in auction ${auctionId}: "${chatMessage}"`);
           
           // Get user profile for chat
           const { data: userProfile } = await supabase
@@ -257,15 +260,19 @@ serve(async (req) => {
             .eq('user_id', userId)
             .single();
 
+          const chatMessageObj = {
+            id: crypto.randomUUID(),
+            user: userProfile?.full_name || "Anonymous",
+            text: chatMessage,
+            timestamp: new Date().toISOString()
+          };
+
+          console.log(`Broadcasting chat message to room ${auctionId}:`, chatMessageObj);
+          
           // Broadcast chat message to all clients in the room
           broadcastToRoom(auctionId, {
             type: "chat_message",
-            message: {
-              id: crypto.randomUUID(),
-              user: userProfile?.full_name || "Anonymous",
-              text: chatMessage,
-              timestamp: new Date().toISOString()
-            }
+            message: chatMessageObj
           });
 
           break;
