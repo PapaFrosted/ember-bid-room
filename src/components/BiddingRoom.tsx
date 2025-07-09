@@ -178,7 +178,19 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               break;
               
             case 'chat_message':
-              setChatMessages(prev => [...prev, message.message]);
+              // Only add message if it's not from the current user (to avoid duplicates)
+              // We check against the user's profile name from database
+              supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('user_id', user?.id)
+                .single()
+                .then(({ data: userProfile }) => {
+                  const messageFromSelf = message.message.user === userProfile?.full_name || message.message.user === "You";
+                  if (!messageFromSelf) {
+                    setChatMessages(prev => [...prev, message.message]);
+                  }
+                });
               break;
           }
         } catch (error) {
@@ -350,13 +362,33 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     }
   };
 
-  const handleSendMessage = () => {
-    if (!ws || !chatMessage.trim()) return;
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim()) return;
 
-    ws.send(JSON.stringify({
-      type: 'send_message',
-      message: chatMessage.trim()
-    }));
+    // Get user profile for display name
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('user_id', user?.id)
+      .single();
+
+    const newMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      user: userProfile?.full_name || "You",
+      text: chatMessage.trim(),
+      timestamp: new Date().toISOString()
+    };
+
+    // Add message to local state immediately
+    setChatMessages(prev => [...prev, newMessage]);
+
+    // Send via WebSocket if connected, otherwise just show locally
+    if (ws && connectionStatus === 'connected') {
+      ws.send(JSON.stringify({
+        type: 'send_message',
+        message: chatMessage.trim()
+      }));
+    }
 
     setChatMessage('');
   };
@@ -587,12 +619,13 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                 onChange={(e) => setChatMessage(e.target.value)}
                 placeholder="Type a message..."
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                disabled={connectionStatus !== 'connected'}
+                className="flex-1"
               />
               <Button 
                 onClick={handleSendMessage}
-                disabled={connectionStatus !== 'connected' || !chatMessage.trim()}
-                size="icon"
+                disabled={!chatMessage.trim()}
+                size="sm"
+                className="px-3"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -600,7 +633,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
             
             {connectionStatus !== 'connected' && (
               <div className="text-xs text-muted-foreground mt-2 text-center">
-                Chat unavailable in offline mode
+                Chat in offline mode - messages won't sync with other users
               </div>
             )}
           </CardContent>
