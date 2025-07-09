@@ -66,47 +66,47 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   const [loading, setLoading] = useState(true);
 
   // Fetch initial auction data directly from Supabase
-  useEffect(() => {
-    const fetchAuctionData = async () => {
-      try {
-        const { data: auctionData, error } = await supabase
-          .from('auctions')
-          .select(`
-            *,
-            bids (
-              id,
-              amount,
-              created_at,
-              bidder:profiles!bidder_id (
-                full_name,
-                is_verified
-              )
+  const fetchAuctionData = async () => {
+    try {
+      const { data: auctionData, error } = await supabase
+        .from('auctions')
+        .select(`
+          *,
+          bids (
+            id,
+            amount,
+            created_at,
+            bidder:profiles!bidder_id (
+              full_name,
+              is_verified
             )
-          `)
-          .eq('id', auctionId)
-          .single();
+          )
+        `)
+        .eq('id', auctionId)
+        .single();
 
-        if (error) {
-          console.error('Error fetching auction:', error);
-          toast({
-            title: "Error",
-            description: "Failed to load auction data",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        setAuction(auctionData);
-        setBids(auctionData.bids?.sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ) || []);
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setLoading(false);
+      if (error) {
+        console.error('Error fetching auction:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load auction data",
+          variant: "destructive",
+        });
+        return;
       }
-    };
 
+      setAuction(auctionData);
+      setBids(auctionData.bids?.sort((a: any, b: any) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ) || []);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAuctionData();
   }, [auctionId, toast]);
 
@@ -118,8 +118,10 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.supabase.co/functions/v1/auction-websocket`);
       
       websocket.onopen = () => {
+        console.log('WebSocket connected successfully');
         setIsConnected(true);
         setWs(websocket);
+        setActiveUsers(1); // At least this user is active
         
         // Join the auction room
         websocket.send(JSON.stringify({
@@ -143,14 +145,16 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
             setAuction(prev => prev ? {
               ...prev,
               current_bid: message.currentBid,
-              total_bids: prev.total_bids + 1
+              total_bids: (prev.total_bids || 0) + 1
             } : null);
             
-            // Show bid notification
-            toast({
-              title: "New Bid!",
-              description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
-            });
+            // Show bid notification if it's not from current user
+            if (message.bid.bidder_id !== user?.id) {
+              toast({
+                title: "New Bid!",
+                description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
+              });
+            }
             break;
             
           case 'chat_message':
@@ -255,8 +259,13 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
         setAuction(prev => prev ? {
           ...prev,
           current_bid: amount,
-          total_bids: prev.total_bids + 1
+          total_bids: (prev.total_bids || 0) + 1
         } : null);
+
+        // Refresh auction data to ensure consistency
+        setTimeout(() => {
+          fetchAuctionData();
+        }, 500);
 
         toast({
           title: "Bid Placed!",
@@ -385,7 +394,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               <Alert className="mb-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Connecting to auction room...
+                  {ws ? "Connecting to live auction room..." : "Using offline mode - bids will still work"}
                 </AlertDescription>
               </Alert>
             )}

@@ -5,6 +5,9 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Store connected clients for broadcasting
+const connectedClients = new Map<string, Set<WebSocket>>();
+
 serve(async (req) => {
   const { headers } = req;
   const upgradeHeader = headers.get("upgrade") || "";
@@ -17,6 +20,23 @@ serve(async (req) => {
   
   let auctionId: string | null = null;
   let userId: string | null = null;
+
+  // Helper function to broadcast to all clients in an auction room
+  const broadcastToRoom = (roomId: string, message: any) => {
+    const clients = connectedClients.get(roomId);
+    if (clients) {
+      const messageStr = JSON.stringify(message);
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          try {
+            client.send(messageStr);
+          } catch (error) {
+            console.error("Error sending message to client:", error);
+          }
+        }
+      });
+    }
+  };
 
   socket.onopen = () => {
     console.log("WebSocket connection opened");
@@ -31,6 +51,12 @@ serve(async (req) => {
           auctionId = message.auctionId;
           userId = message.userId;
           console.log(`User ${userId} joined auction ${auctionId}`);
+          
+          // Add client to room
+          if (!connectedClients.has(auctionId)) {
+            connectedClients.set(auctionId, new Set());
+          }
+          connectedClients.get(auctionId)!.add(socket);
           
           // Send current auction status
           const { data: auction } = await supabase
@@ -137,13 +163,21 @@ serve(async (req) => {
             return;
           }
 
+          // Update auction current_bid
+          await supabase
+            .from('auctions')
+            .update({ 
+              current_bid: bidAmount,
+              total_bids: currentAuction.total_bids ? currentAuction.total_bids + 1 : 1
+            })
+            .eq('id', auctionId);
+
           // Broadcast new bid to all clients in this auction room
-          // In a real implementation, you'd maintain a list of connected clients
-          socket.send(JSON.stringify({
+          broadcastToRoom(auctionId, {
             type: "new_bid",
             bid: newBid,
             currentBid: bidAmount
-          }));
+          });
 
           break;
 
@@ -165,9 +199,8 @@ serve(async (req) => {
             .eq('user_id', userId)
             .single();
 
-          // Broadcast chat message
-          // In a real implementation, you'd broadcast to all clients in the room
-          socket.send(JSON.stringify({
+          // Broadcast chat message to all clients in the room
+          broadcastToRoom(auctionId, {
             type: "chat_message",
             message: {
               id: crypto.randomUUID(),
@@ -175,7 +208,7 @@ serve(async (req) => {
               text: chatMessage,
               timestamp: new Date().toISOString()
             }
-          }));
+          });
 
           break;
       }
@@ -190,6 +223,14 @@ serve(async (req) => {
 
   socket.onclose = () => {
     console.log(`User ${userId} disconnected from auction ${auctionId}`);
+    
+    // Remove client from room
+    if (auctionId && connectedClients.has(auctionId)) {
+      connectedClients.get(auctionId)!.delete(socket);
+      if (connectedClients.get(auctionId)!.size === 0) {
+        connectedClients.delete(auctionId);
+      }
+    }
   };
 
   socket.onerror = (error) => {
