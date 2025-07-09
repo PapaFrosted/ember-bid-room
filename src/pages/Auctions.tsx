@@ -38,7 +38,7 @@ const Auctions = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<'' | 'live' | 'upcoming' | 'ended' | 'draft' | 'cancelled'>('');
   const [sortBy, setSortBy] = useState('end_time');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -206,7 +206,7 @@ const Auctions = () => {
               </Select>
 
               {/* Status Filter */}
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <Select value={selectedStatus} onValueChange={(value: '' | 'live' | 'upcoming' | 'ended' | 'draft' | 'cancelled') => setSelectedStatus(value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
