@@ -1,5 +1,6 @@
+
 import { Button } from "@/components/ui/button";
-import { Search, Gavel, User, Heart, LogOut } from "lucide-react";
+import { Search, Gavel, User, Heart, LogOut, Package } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -8,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 export const Header = () => {
   const { user, signOut } = useAuth();
 
@@ -31,6 +33,11 @@ export const Header = () => {
           <Link to="/categories" className="text-foreground hover:text-primary transition-colors">
             Categories
           </Link>
+          {user && (
+            <Link to="/my-listings" className="text-foreground hover:text-primary transition-colors">
+              My Listings
+            </Link>
+          )}
           <Link to="/sell" className="text-foreground hover:text-primary transition-colors">
             Sell Item
           </Link>
@@ -41,9 +48,16 @@ export const Header = () => {
             <Search className="h-4 w-4" />
           </Button>
           {user && (
-            <Button variant="ghost" size="icon">
-              <Heart className="h-4 w-4" />
-            </Button>
+            <>
+              <Button variant="ghost" size="icon">
+                <Heart className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/my-listings">
+                  <Package className="h-4 w-4" />
+                </Link>
+              </Button>
+            </>
           )}
           
           {user ? (
@@ -60,6 +74,9 @@ export const Header = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link to="/profile">Profile</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/my-listings">My Listings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={signOut}>
                   <LogOut className="h-4 w-4 mr-2" />
