@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Header } from '@/components/Header';
+import { AuctionCard } from '@/components/AuctionCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 
 interface Category {
   id: string;
@@ -12,30 +15,121 @@ interface Category {
   image_url: string | null;
 }
 
+interface Auction {
+  id: string;
+  title: string;
+  description: string;
+  currentBid: number;
+  startingBid: number;
+  imageUrl: string;
+  status: 'live' | 'upcoming' | 'ended';
+  endTime: string;
+  bidCount: number;
+  watchers: number;
+  category: {
+    name: string;
+    slug: string;
+  };
+}
+
+interface CategoryWithAuctions extends Category {
+  auctions: Auction[];
+}
+
 const Categories = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesWithAuctions, setCategoriesWithAuctions] = useState<CategoryWithAuctions[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchCategories();
+    fetchCategoriesWithAuctions();
   }, []);
 
-  const fetchCategories = async () => {
-    const { data, error } = await supabase
+  const fetchCategoriesWithAuctions = async () => {
+    setLoading(true);
+    
+    // Fetch categories
+    const { data: categories, error: categoriesError } = await supabase
       .from('categories')
       .select('*')
       .eq('is_active', true)
       .order('name');
 
-    if (error) {
-      console.error('Error fetching categories:', error);
+    if (categoriesError) {
+      console.error('Error fetching categories:', categoriesError);
       setLoading(false);
       return;
     }
 
-    setCategories(data || []);
+    // Fetch auctions for each category (limit 3 per category)
+    const categoriesWithAuctions = await Promise.all(
+      (categories || []).map(async (category) => {
+        const { data: auctions, error: auctionsError } = await supabase
+          .from('auctions')
+          .select(`
+            *,
+            category:categories!category_id (
+              name,
+              slug
+            )
+          `)
+          .eq('category_id', category.id)
+          .in('status', ['live', 'upcoming'])
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (auctionsError) {
+          console.error('Error fetching auctions for category:', category.name, auctionsError);
+          return { ...category, auctions: [] };
+        }
+
+        // Transform auction data
+        const transformedAuctions = (auctions || []).map((auction: any) => ({
+          id: auction.id,
+          title: auction.title,
+          description: auction.description,
+          currentBid: auction.current_bid || 0,
+          startingBid: auction.starting_bid,
+          imageUrl: auction.images?.[0] || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=300&fit=crop',
+          status: auction.status,
+          endTime: getTimeDisplay(auction),
+          bidCount: auction.total_bids || 0,
+          watchers: auction.total_watchers || 0,
+          category: auction.category
+        }));
+
+        return { ...category, auctions: transformedAuctions };
+      })
+    );
+
+    setCategoriesWithAuctions(categoriesWithAuctions);
     setLoading(false);
+  };
+
+  const getTimeDisplay = (auction: any) => {
+    const now = new Date();
+    const startTime = new Date(auction.start_time);
+    const endTime = new Date(auction.end_time);
+
+    if (auction.status === 'upcoming') {
+      const diff = startTime.getTime() - now.getTime();
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      if (days > 0) return `Starts in ${days}d ${hours}h`;
+      return `Starts in ${hours}h`;
+    }
+
+    if (auction.status === 'live') {
+      const diff = endTime.getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 0) return `Ends in ${hours}h ${minutes}m`;
+      return `Ends in ${minutes}m`;
+    }
+
+    return 'Auction ended';
   };
 
   const handleCategoryClick = (categoryId: string) => {
@@ -72,34 +166,63 @@ const Categories = () => {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (
+          <div className="space-y-12">
+            {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i} className="overflow-hidden">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 bg-muted rounded-full mx-auto mb-4 animate-pulse" />
-                  <div className="h-4 bg-muted rounded animate-pulse mb-2" />
-                  <div className="h-3 bg-muted rounded animate-pulse w-3/4 mx-auto" />
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="h-8 bg-muted rounded animate-pulse w-48" />
+                    <div className="h-10 bg-muted rounded animate-pulse w-24" />
+                  </div>
+                  <div className="h-4 bg-muted rounded animate-pulse w-64" />
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {Array.from({ length: 3 }).map((_, j) => (
+                      <div key={j} className="h-64 bg-muted rounded animate-pulse" />
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
-        ) : categories.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {categories.map((category) => (
-              <Card 
-                key={category.id} 
-                className="hover:shadow-elegant transition-all duration-300 cursor-pointer group"
-                onClick={() => handleCategoryClick(category.id)}
-              >
-                <CardContent className="p-6 text-center">
-                  <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">
-                    {getCategoryIcon(category.slug)}
+        ) : categoriesWithAuctions.length > 0 ? (
+          <div className="space-y-12">
+            {categoriesWithAuctions.map((category) => (
+              <Card key={category.id} className="overflow-hidden">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-2xl flex items-center gap-3">
+                        <span className="text-3xl">{getCategoryIcon(category.slug)}</span>
+                        {category.name}
+                      </CardTitle>
+                      {category.description && (
+                        <p className="text-muted-foreground mt-2">{category.description}</p>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleCategoryClick(category.id)}
+                      className="flex items-center gap-2"
+                    >
+                      See More
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">{category.name}</h3>
-                  {category.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {category.description}
-                    </p>
+                </CardHeader>
+                <CardContent>
+                  {category.auctions.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {category.auctions.map((auction) => (
+                        <AuctionCard key={auction.id} {...auction} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <div className="text-4xl mb-2">📦</div>
+                      <p>No active auctions in this category</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
