@@ -157,10 +157,18 @@ serve(async (req) => {
             return;
           }
 
-          // Validate bid amount
+          // Get the actual highest bid from bids table
+          const { data: highestBid } = await supabase
+            .from('bids')
+            .select('amount')
+            .eq('auction_id', auctionId)
+            .order('amount', { ascending: false })
+            .limit(1)
+            .single();
+
           const { data: currentAuction } = await supabase
             .from('auctions')
-            .select('current_bid, starting_bid, bid_increment, status, total_bids')
+            .select('starting_bid, bid_increment, status, total_bids')
             .eq('id', auctionId)
             .single();
 
@@ -172,14 +180,14 @@ serve(async (req) => {
             return;
           }
 
-          // Validate bid amount - first bid must be > starting_bid, subsequent bids must be > current_bid
-          const isFirstBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000;
-          const minimumRequired = isFirstBid ? currentAuction.starting_bid : currentAuction.current_bid;
+          // Determine minimum required bid
+          const currentHighestBid = highestBid?.amount || 0;
+          const minimumRequired = currentHighestBid > 0 ? currentHighestBid : currentAuction.starting_bid;
           
           if (bidAmount <= minimumRequired) {
-            const errorMessage = isFirstBid 
-              ? `First bid must be greater than $${currentAuction.starting_bid}`
-              : `Bid must be greater than current bid of $${currentAuction.current_bid}`;
+            const errorMessage = currentHighestBid > 0
+              ? `Bid must be greater than current highest bid of $${currentHighestBid.toLocaleString()}`
+              : `First bid must be greater than starting bid of $${currentAuction.starting_bid.toLocaleString()}`;
             socket.send(JSON.stringify({
               type: "error",
               message: errorMessage
@@ -213,10 +221,8 @@ serve(async (req) => {
             return;
           }
 
-          // Update auction current_bid (only if it's a valid increase)
-          const newCurrentBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000 
-            ? bidAmount 
-            : Math.max(bidAmount, currentAuction.current_bid);
+          // Update auction current_bid to the new highest bid
+          const newCurrentBid = bidAmount;
             
           const { error: updateError } = await supabase
             .from('auctions')
@@ -268,8 +274,9 @@ serve(async (req) => {
           };
 
           console.log(`Broadcasting chat message to room ${auctionId}:`, chatMessageObj);
+          console.log(`Current clients in room ${auctionId}:`, connectedClients.get(auctionId)?.size || 0);
           
-          // Broadcast chat message to all clients in the room
+          // Broadcast chat message to all clients in the room (including sender)
           broadcastToRoom(auctionId, {
             type: "chat_message",
             message: chatMessageObj

@@ -180,7 +180,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               
             case 'chat_message':
               console.log('Received chat message:', message.message);
-              // Add all incoming chat messages (broadcasting handles not sending to sender)
+              // Add all incoming chat messages (WebSocket broadcasts to everyone including sender)
               setChatMessages(prev => [...prev, message.message]);
               break;
           }
@@ -264,14 +264,14 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
 
     const amount = parseFloat(bidAmount);
     
-    // First bid must be greater than starting_bid, subsequent bids must be greater than current_bid
-    const isFirstBid = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000;
-    const minimumBid = isFirstBid ? auction.starting_bid + 0.01 : auction.current_bid + 0.01;
+    // Get the actual highest bid amount from the bids array
+    const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
+    const minimumRequired = highestBidAmount > 0 ? highestBidAmount : auction.starting_bid;
 
-    if (amount <= minimumBid) {
-      const errorMessage = isFirstBid 
-        ? `First bid must be greater than $${auction.starting_bid.toLocaleString()}`
-        : `Bid must be greater than current bid of $${auction.current_bid.toLocaleString()}`;
+    if (amount <= minimumRequired) {
+      const errorMessage = highestBidAmount > 0
+        ? `Bid must be greater than current highest bid of $${highestBidAmount.toLocaleString()}`
+        : `First bid must be greater than starting bid of $${auction.starting_bid.toLocaleString()}`;
       toast({
         title: "Invalid Bid",
         description: errorMessage,
@@ -504,16 +504,15 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                   type="number"
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
-                    placeholder={
-                      auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
-                        ? `Min: $${auction.starting_bid.toLocaleString()}`
-                        : `Min: $${(auction.current_bid + auction.bid_increment).toLocaleString()}`
-                    }
-                    min={
-                      auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
-                        ? auction.starting_bid
-                        : auction.current_bid + auction.bid_increment
-                    }
+                    placeholder={(() => {
+                      const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
+                      const minBid = highestBidAmount > 0 ? highestBidAmount + auction.bid_increment : auction.starting_bid;
+                      return `Min: $${minBid.toLocaleString()}`;
+                    })()}
+                    min={(() => {
+                      const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
+                      return highestBidAmount > 0 ? highestBidAmount + auction.bid_increment : auction.starting_bid;
+                    })()}
                   step={auction.bid_increment}
                 />
               </div>
@@ -530,9 +529,8 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
             
               <div className="flex flex-wrap gap-2">
                 {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => {
-                  const baseAmount = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
-                    ? auction.starting_bid
-                    : auction.current_bid;
+                  const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
+                  const baseAmount = highestBidAmount > 0 ? highestBidAmount : auction.starting_bid;
                   return (
                     <Button
                       key={increment}
