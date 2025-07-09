@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ interface AuctionCardProps {
   currentBid: number;
   startingBid: number;
   imageUrl: string;
-  status: 'live' | 'upcoming' | 'ended';
+  status: 'draft' | 'upcoming' | 'live' | 'ended' | 'cancelled';
   endTime: string;
   bidCount: number;
   watchers: number;
@@ -48,6 +49,8 @@ export const AuctionCard = ({
       case 'live': return 'bg-auction-live';
       case 'upcoming': return 'bg-auction-upcoming';
       case 'ended': return 'bg-auction-ended';
+      case 'draft': return 'bg-muted';
+      case 'cancelled': return 'bg-destructive';
       default: return 'bg-muted';
     }
   };
@@ -57,6 +60,8 @@ export const AuctionCard = ({
       case 'live': return 'LIVE';
       case 'upcoming': return 'UPCOMING';
       case 'ended': return 'ENDED';
+      case 'draft': return 'DRAFT';
+      case 'cancelled': return 'CANCELLED';
       default: return '';
     }
   };
@@ -70,7 +75,7 @@ export const AuctionCard = ({
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
         />
         <Badge 
-          className={`absolute top-3 left-3 ${getStatusColor()} text-white animate-pulse-slow`}
+          className={`absolute top-3 left-3 ${getStatusColor()} text-white ${status === 'live' ? 'animate-pulse-slow' : ''}`}
         >
           {getStatusText()}
         </Badge>
@@ -130,6 +135,16 @@ export const AuctionCard = ({
         {status === 'ended' && (
           <Button className="w-full" variant="secondary" onClick={() => navigate(`/auction/${id}`)} disabled>
             Auction Ended
+          </Button>
+        )}
+        {status === 'draft' && (
+          <Button className="w-full" variant="outline" onClick={() => navigate(`/auction/${id}`)}>
+            View Draft
+          </Button>
+        )}
+        {status === 'cancelled' && (
+          <Button className="w-full" variant="destructive" onClick={() => navigate(`/auction/${id}`)} disabled>
+            Cancelled
           </Button>
         )}
       </CardFooter>
