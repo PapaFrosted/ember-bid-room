@@ -11,11 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Gavel, 
-  MessageCircle, 
   Users, 
   TrendingUp, 
-  Clock, 
-  Send,
+  Clock,
   AlertCircle 
 } from 'lucide-react';
 
@@ -29,12 +27,6 @@ interface Bid {
   };
 }
 
-interface ChatMessage {
-  id: string;
-  user: string;
-  text: string;
-  timestamp: string;
-}
 
 interface Auction {
   id: string;
@@ -57,9 +49,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   
   const [auction, setAuction] = useState<Auction | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [bidAmount, setBidAmount] = useState('');
-  const [chatMessage, setChatMessage] = useState('');
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'failed'>('disconnected');
@@ -166,10 +156,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                   description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
                 });
               }
-              break;
-              
-            case 'chat_message':
-              setChatMessages(prev => [...prev, message.message]);
               break;
               
             case 'error':
@@ -349,16 +335,6 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     }
   };
 
-  const handleSendMessage = () => {
-    if (!ws || !chatMessage.trim()) return;
-
-    ws.send(JSON.stringify({
-      type: 'send_message',
-      message: chatMessage.trim()
-    }));
-
-    setChatMessage('');
-  };
 
   const formatTimeRemaining = (endTime: string) => {
     const end = new Date(endTime).getTime();
@@ -397,195 +373,145 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-screen max-h-[80vh]">
-      {/* Bidding Section */}
-      <div className="lg:col-span-2 space-y-6">
-        {/* Auction Status */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center space-x-2">
-                <Gavel className="h-5 w-5" />
-                <span>{auction.title}</span>
-              </CardTitle>
-              <div className="flex items-center space-x-4">
-                <Badge variant="destructive" className="animate-pulse">
-                  LIVE
-                </Badge>
-                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span>{activeUsers} active</span>
-                </div>
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Auction Status */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2">
+              <Gavel className="h-5 w-5" />
+              <span>{auction.title}</span>
+            </CardTitle>
+            <div className="flex items-center space-x-4">
+              <Badge variant="destructive" className="animate-pulse">
+                LIVE
+              </Badge>
+              <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                <Users className="h-4 w-4" />
+                <span>{activeUsers} active</span>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">
-                  ${auction.current_bid.toLocaleString()}
-                </div>
-                <div className="text-sm text-muted-foreground">Current Bid</div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">
+                ${auction.current_bid.toLocaleString()}
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {auction.total_bids}
-                </div>
-                <div className="text-sm text-muted-foreground">Total Bids</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {auction.total_watchers}
-                </div>
-                <div className="text-sm text-muted-foreground">Watching</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-500">
-                  {formatTimeRemaining(auction.end_time)}
-                </div>
-                <div className="text-sm text-muted-foreground">Time Left</div>
-              </div>
+              <div className="text-sm text-muted-foreground">Current Bid</div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-center">
+              <div className="text-2xl font-bold">
+                {auction.total_bids}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Bids</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold">
+                {auction.total_watchers}
+              </div>
+              <div className="text-sm text-muted-foreground">Watching</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500">
+                {formatTimeRemaining(auction.end_time)}
+              </div>
+              <div className="text-sm text-muted-foreground">Time Left</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Bidding Controls */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Place Your Bid</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {connectionStatus !== 'connected' && (
-              <Alert className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {connectionStatus === 'connecting' && "Connecting to live auction room..."}
-                  {connectionStatus === 'disconnected' && reconnectAttempts > 0 && `Reconnecting... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`}
-                  {connectionStatus === 'failed' && "Using offline mode - bids will still work but you won't see real-time updates."}
-                </AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  value={bidAmount}
-                  onChange={(e) => setBidAmount(e.target.value)}
-                  placeholder={`Min: $${(auction.current_bid + auction.bid_increment).toLocaleString()}`}
-                  min={auction.current_bid + auction.bid_increment}
-                  step={auction.bid_increment}
-                />
-              </div>
-              <Button 
-                onClick={handlePlaceBid}
-                disabled={!bidAmount}
-                variant="bid"
-                className="min-w-32"
-              >
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Place Bid
-              </Button>
+      {/* Bidding Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Place Your Bid</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {connectionStatus !== 'connected' && (
+            <Alert className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {connectionStatus === 'connecting' && "Connecting to live auction room..."}
+                {connectionStatus === 'disconnected' && reconnectAttempts > 0 && `Reconnecting... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`}
+                {connectionStatus === 'failed' && "Using offline mode - bids will still work but you won't see real-time updates."}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <div className="flex space-x-4">
+            <div className="flex-1">
+              <Input
+                type="number"
+                value={bidAmount}
+                onChange={(e) => setBidAmount(e.target.value)}
+                placeholder={`Min: $${(auction.current_bid + auction.bid_increment).toLocaleString()}`}
+                min={auction.current_bid + auction.bid_increment}
+                step={auction.bid_increment}
+              />
             </div>
-            
-            <div className="flex space-x-2 mt-4">
-              {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => (
-                <Button
-                  key={increment}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBidAmount((auction.current_bid + increment).toString())}
-                >
-                  +${increment}
-                </Button>
+            <Button 
+              onClick={handlePlaceBid}
+              disabled={!bidAmount}
+              variant="bid"
+              className="min-w-32"
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Place Bid
+            </Button>
+          </div>
+          
+          <div className="flex space-x-2 mt-4">
+            {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => (
+              <Button
+                key={increment}
+                variant="outline"
+                size="sm"
+                onClick={() => setBidAmount((auction.current_bid + increment).toString())}
+              >
+                +${increment}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bid History */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Bids</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-96">
+            <div className="space-y-2">
+              {bids.map((bid, index) => (
+                <div key={bid.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={index === 0 ? "default" : "secondary"}>
+                      #{bids.length - index}
+                    </Badge>
+                    <span className="font-medium">
+                      {bid.bidder.full_name}
+                      {bid.bidder.is_verified && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          ✓
+                        </Badge>
+                      )}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">${bid.amount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(bid.created_at).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Bid History */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Bids</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-64">
-              <div className="space-y-2">
-                {bids.map((bid, index) => (
-                  <div key={bid.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={index === 0 ? "default" : "secondary"}>
-                        #{bids.length - index}
-                      </Badge>
-                      <span className="font-medium">
-                        {bid.bidder.full_name}
-                        {bid.bidder.is_verified && (
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            ✓
-                          </Badge>
-                        )}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">${bid.amount.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(bid.created_at).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Chat Section */}
-      <div className="lg:col-span-1">
-        <Card className="h-full flex flex-col">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <MessageCircle className="h-5 w-5" />
-              <span>Live Chat</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
-            <ScrollArea className="flex-1 h-64">
-              <div className="space-y-2">
-                {chatMessages.map((message) => (
-                  <div key={message.id} className="p-2 rounded-lg bg-muted/50">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{message.user}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(message.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-sm">{message.text}</p>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-            
-            <Separator className="my-4" />
-            
-            <div className="flex space-x-2">
-              <Input
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder="Type a message..."
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              />
-              <Button 
-                onClick={handleSendMessage}
-                disabled={!isConnected || !chatMessage.trim()}
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 };
