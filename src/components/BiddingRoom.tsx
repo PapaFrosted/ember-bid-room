@@ -431,7 +431,8 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-screen max-h-[80vh]">
+    <div className="container mx-auto px-4 py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Bidding Section */}
       <div className="lg:col-span-2 space-y-6">
         {/* Auction Status */}
@@ -443,8 +444,8 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                 <span>{auction.title}</span>
               </CardTitle>
               <div className="flex items-center space-x-4">
-                <Badge variant="destructive" className="animate-pulse">
-                  LIVE
+                <Badge variant={auction.status === 'live' ? "destructive" : "secondary"} className={auction.status === 'live' ? "animate-pulse" : ""}>
+                  {auction.status?.toUpperCase()}
                 </Badge>
                 <div className="flex items-center space-x-1 text-sm text-muted-foreground">
                   <Users className="h-4 w-4" />
@@ -638,6 +639,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
             )}
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );

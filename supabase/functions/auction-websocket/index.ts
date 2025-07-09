@@ -164,10 +164,10 @@ serve(async (req) => {
             .eq('id', auctionId)
             .single();
 
-          if (!currentAuction || currentAuction.status !== 'live') {
+          if (!currentAuction || !['live', 'upcoming'].includes(currentAuction.status)) {
             socket.send(JSON.stringify({
               type: "error",
-              message: "Auction is not live"
+              message: "Auction is not available for bidding"
             }));
             return;
           }
