@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Heart, Clock, Users, Eye } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface AuctionCardProps {
   id: string;
@@ -19,6 +20,7 @@ interface AuctionCardProps {
 }
 
 export const AuctionCard = ({ 
+  id,
   title, 
   description, 
   currentBid, 
@@ -30,7 +32,16 @@ export const AuctionCard = ({
   watchers,
   isWatched = false 
 }: AuctionCardProps) => {
-  const [watched, setWatched] = useState(isWatched);
+  const navigate = useNavigate();
+  const watchedKey = `auction_watched_${id}`;
+  const [watched, setWatched] = useState(() => {
+    const saved = localStorage.getItem(watchedKey);
+    return saved ? JSON.parse(saved) : isWatched;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(watchedKey, JSON.stringify(watched));
+  }, [watched, watchedKey]);
 
   const getStatusColor = () => {
     switch (status) {
@@ -107,17 +118,17 @@ export const AuctionCard = ({
 
       <CardFooter className="p-4 pt-0">
         {status === 'live' && (
-          <Button className="w-full" variant="bid">
+          <Button className="w-full" variant="bid" onClick={() => navigate(`/auction/${id}`)}>
             Place Bid
           </Button>
         )}
         {status === 'upcoming' && (
-          <Button className="w-full" variant="outline">
+          <Button className="w-full" variant="outline" onClick={() => navigate(`/auction/${id}`)}>
             Watch Auction
           </Button>
         )}
         {status === 'ended' && (
-          <Button className="w-full" variant="secondary" disabled>
+          <Button className="w-full" variant="secondary" onClick={() => navigate(`/auction/${id}`)} disabled>
             Auction Ended
           </Button>
         )}

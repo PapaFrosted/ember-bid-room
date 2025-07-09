@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Filter, SortDesc, Users, TrendingUp, Clock, Star } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // Mock data for featured auctions
 const featuredAuctions = [
@@ -60,6 +61,8 @@ const featuredAuctions = [
 ];
 
 const Index = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -126,7 +129,7 @@ const Index = () => {
             </div>
 
             <div className="text-center mt-12">
-              <Button variant="auction" size="lg">
+              <Button variant="auction" size="lg" onClick={() => navigate('/auctions')}>
                 View All Auctions
               </Button>
             </div>
