@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { createHmac } from "https://deno.land/std@0.190.0/node/crypto.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,11 +31,24 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Razorpay secret key not configured");
     }
 
-    // Verify signature
+    // Verify signature using Web Crypto API
     const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = createHmac("sha256", razorpayKeySecret)
-      .update(body)
-      .digest("hex");
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(razorpayKeySecret);
+    const messageData = encoder.encode(body);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const expectedSignature = Array.from(new Uint8Array(signature))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
 
     if (expectedSignature !== razorpay_signature) {
       throw new Error("Invalid payment signature");
