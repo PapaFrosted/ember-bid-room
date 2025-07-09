@@ -7,36 +7,54 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+console.log('Auction WebSocket function initializing...');
 
-console.log('Auction WebSocket function starting...');
+try {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseServiceKey: !!supabaseServiceKey });
+    throw new Error('Missing required environment variables');
+  }
+  
+  console.log('Environment variables loaded successfully');
+} catch (error) {
+  console.error('Failed to load environment variables:', error);
+  throw error;
+}
+
+const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+console.log('Supabase client created successfully');
 
 // Store connected clients for broadcasting
 const connectedClients = new Map<string, Set<WebSocket>>();
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  try {
+    console.log('Incoming request:', req.method, req.url);
+    
+    // Handle CORS preflight requests
+    if (req.method === 'OPTIONS') {
+      console.log('Handling CORS preflight request');
+      return new Response(null, { headers: corsHeaders });
+    }
 
-  console.log('Incoming request:', req.method, req.url);
-  const { headers } = req;
-  const upgradeHeader = headers.get("upgrade") || "";
+    const { headers } = req;
+    const upgradeHeader = headers.get("upgrade") || "";
+    console.log('Upgrade header:', upgradeHeader);
 
-  console.log('Upgrade header:', upgradeHeader);
+    if (upgradeHeader.toLowerCase() !== "websocket") {
+      console.log('Not a WebSocket request, returning error');
+      return new Response("Expected WebSocket connection", { 
+        status: 400, 
+        headers: corsHeaders 
+      });
+    }
 
-  if (upgradeHeader.toLowerCase() !== "websocket") {
-    console.log('Not a WebSocket request, returning error');
-    return new Response("Expected WebSocket connection", { 
-      status: 400, 
-      headers: corsHeaders 
-    });
-  }
-
-  const { socket, response } = Deno.upgradeWebSocket(req);
+    console.log('Upgrading to WebSocket connection...');
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    console.log('WebSocket upgrade successful');
   
   let auctionId: string | null = null;
   let userId: string | null = null;
@@ -267,9 +285,16 @@ serve(async (req) => {
     }
   };
 
-  socket.onerror = (error) => {
-    console.error("WebSocket server error:", error);
-  };
+    socket.onerror = (error) => {
+      console.error("WebSocket server error:", error);
+    };
 
-  return response;
+    return response;
+  } catch (error) {
+    console.error('Error in WebSocket handler:', error);
+    return new Response(`WebSocket error: ${error.message}`, { 
+      status: 500, 
+      headers: corsHeaders 
+    });
+  }
 });

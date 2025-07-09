@@ -62,8 +62,11 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   const [chatMessage, setChatMessage] = useState('');
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'failed'>('disconnected');
   const [activeUsers, setActiveUsers] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const maxReconnectAttempts = 3;
 
   // Fetch initial auction data directly from Supabase
   const fetchAuctionData = async () => {
@@ -110,10 +113,12 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     fetchAuctionData();
   }, [auctionId, toast]);
 
-  useEffect(() => {
+  // Enhanced WebSocket connection with reconnection logic
+  const connectWebSocket = async () => {
     if (!user || !auctionId) return;
 
-    // Try to connect to WebSocket with proper URL format
+    setConnectionStatus('connecting');
+    
     try {
       console.log('Attempting WebSocket connection...');
       const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.functions.supabase.co/auction-websocket`);
@@ -121,8 +126,10 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       websocket.onopen = () => {
         console.log('WebSocket connected successfully to auction room');
         setIsConnected(true);
+        setConnectionStatus('connected');
         setWs(websocket);
-        setActiveUsers(1); // At least this user is active
+        setActiveUsers(1);
+        setReconnectAttempts(0);
         
         // Join the auction room
         const joinMessage = {
@@ -135,75 +142,118 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       };
 
       websocket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        
-        switch (message.type) {
-          case 'auction_status':
-            setAuction(message.auction);
-            setBids(message.bids || []);
-            break;
-            
-          case 'new_bid':
-            setBids(prev => [message.bid, ...prev]);
-            setAuction(prev => prev ? {
-              ...prev,
-              current_bid: message.currentBid,
-              total_bids: (prev.total_bids || 0) + 1
-            } : null);
-            
-            // Show bid notification if it's not from current user
-            if (message.bid.bidder_id !== user?.id) {
+        try {
+          const message = JSON.parse(event.data);
+          
+          switch (message.type) {
+            case 'auction_status':
+              setAuction(message.auction);
+              setBids(message.bids || []);
+              break;
+              
+            case 'new_bid':
+              setBids(prev => [message.bid, ...prev]);
+              setAuction(prev => prev ? {
+                ...prev,
+                current_bid: message.currentBid,
+                total_bids: (prev.total_bids || 0) + 1
+              } : null);
+              
+              // Show bid notification if it's not from current user
+              if (message.bid.bidder_id !== user?.id) {
+                toast({
+                  title: "New Bid!",
+                  description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
+                });
+              }
+              break;
+              
+            case 'chat_message':
+              setChatMessages(prev => [...prev, message.message]);
+              break;
+              
+            case 'error':
               toast({
-                title: "New Bid!",
-                description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
+                title: "Error",
+                description: message.message,
+                variant: "destructive",
               });
-            }
-            break;
-            
-          case 'chat_message':
-            setChatMessages(prev => [...prev, message.message]);
-            break;
-            
-          case 'error':
-            toast({
-              title: "Error",
-              description: message.message,
-              variant: "destructive",
-            });
-            break;
+              break;
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
         }
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
+        console.log('WebSocket connection closed:', event.code, event.reason);
         setIsConnected(false);
+        setConnectionStatus('disconnected');
         setWs(null);
+        
+        // Attempt reconnection if not manually closed
+        if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+          setTimeout(() => {
+            setReconnectAttempts(prev => prev + 1);
+            connectWebSocket();
+          }, 3000 * (reconnectAttempts + 1)); // Exponential backoff
+        }
       };
 
       websocket.onerror = (error) => {
         console.error('WebSocket connection error:', error);
-        console.error('Failed to connect to WebSocket URL:', `wss://irnlrgnitkabszykuhxh.functions.supabase.co/auction-websocket`);
         setIsConnected(false);
-        toast({
-          title: "Connection Issue",
-          description: "Unable to connect to live auction room. Bids will still work in offline mode.",
-          variant: "destructive",
-        });
+        setConnectionStatus('failed');
+        
+        if (reconnectAttempts === 0) {
+          toast({
+            title: "Connection Issue",
+            description: "Unable to connect to live auction room. Using offline mode.",
+            variant: "destructive",
+          });
+        }
       };
 
-      return () => {
-        websocket.close();
-      };
+      return websocket;
     } catch (error) {
       console.error('WebSocket initialization failed:', error);
-      console.error('Error details:', error.message);
       setIsConnected(false);
+      setConnectionStatus('failed');
+      
       toast({
         title: "WebSocket Error",
         description: `Failed to initialize WebSocket connection: ${error.message}`,
         variant: "destructive",
       });
     }
-  }, [user, auctionId, toast]);
+  };
+
+  useEffect(() => {
+    let websocket: WebSocket | undefined;
+    
+    const initConnection = async () => {
+      websocket = await connectWebSocket();
+    };
+    
+    initConnection();
+
+    return () => {
+      if (websocket) {
+        websocket.close(1000, 'Component unmounting');
+      }
+    };
+  }, [user, auctionId]);
+
+  // Periodic polling as fallback for offline mode
+  useEffect(() => {
+    if (!isConnected && auction) {
+      const pollInterval = setInterval(() => {
+        fetchAuctionData();
+      }, 5000); // Poll every 5 seconds when offline
+
+      return () => clearInterval(pollInterval);
+    }
+  }, [isConnected, auction]);
 
   const handlePlaceBid = async () => {
     if (!bidAmount || !auction) return;
@@ -405,11 +455,13 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
             <CardTitle>Place Your Bid</CardTitle>
           </CardHeader>
           <CardContent>
-            {!isConnected && (
+            {connectionStatus !== 'connected' && (
               <Alert className="mb-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {ws ? "Connecting to live auction room..." : "WebSocket connection failed - using offline mode. Bids will still work but you won't see real-time updates."}
+                  {connectionStatus === 'connecting' && "Connecting to live auction room..."}
+                  {connectionStatus === 'disconnected' && reconnectAttempts > 0 && `Reconnecting... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`}
+                  {connectionStatus === 'failed' && "Using offline mode - bids will still work but you won't see real-time updates."}
                 </AlertDescription>
               </Alert>
             )}

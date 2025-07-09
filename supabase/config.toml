@@ -1,1 +1,4 @@
 project_id = "irnlrgnitkabszykuhxh"
+
+[functions.auction-websocket]
+verify_jwt = false
