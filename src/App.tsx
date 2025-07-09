@@ -7,6 +7,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Auctions from "./pages/Auctions";
+import Categories from "./pages/Categories";
+import Upcoming from "./pages/Upcoming";
 import AuctionDetails from "./pages/AuctionDetails";
 import PaymentPage from "./pages/PaymentPage";
 import SellItem from "./pages/SellItem";
@@ -25,6 +27,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/auctions" element={<Auctions />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/upcoming" element={<Upcoming />} />
             <Route path="/auction/:id" element={<AuctionDetails />} />
             <Route path="/payment/:id" element={<PaymentPage />} />
             <Route path="/sell" element={<SellItem />} />
