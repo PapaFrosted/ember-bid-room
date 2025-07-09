@@ -1,3 +1,4 @@
+
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { AuctionCard } from "@/components/AuctionCard";
@@ -6,62 +7,154 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Filter, SortDesc, Users, TrendingUp, Clock, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
-// Mock data for featured auctions
-const featuredAuctions = [
-  {
-    id: "1",
-    title: "Vintage Rolex Submariner 1965",
-    description: "Rare vintage diving watch in excellent condition with original box and papers. A true collector's piece.",
-    currentBid: 15750,
-    startingBid: 8000,
-    imageUrl: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=300&fit=crop&crop=center",
-    status: "live" as const,
-    endTime: "Ends in 2h 34m",
-    bidCount: 23,
-    watchers: 156,
-    isWatched: true
-  },
-  {
-    id: "2", 
-    title: "Abstract Oil Painting by Modern Artist",
-    description: "Contemporary abstract piece featuring bold colors and dynamic composition. Signed and authenticated.",
-    currentBid: 3200,
-    startingBid: 1500,
-    imageUrl: "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&h=300&fit=crop&crop=center",
-    status: "live" as const,
-    endTime: "Ends in 5h 12m", 
-    bidCount: 8,
-    watchers: 89,
-  },
-  {
-    id: "3",
-    title: "Antique Persian Rug - 19th Century",
-    description: "Hand-woven masterpiece with intricate patterns and natural dyes. Museum quality piece.",
-    currentBid: 0,
-    startingBid: 2800,
-    imageUrl: "https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?w=400&h=300&fit=crop&crop=center",
-    status: "upcoming" as const,
-    endTime: "Starts in 1d 4h",
-    bidCount: 0,
-    watchers: 234,
-  },
-  {
-    id: "4",
-    title: "Rare First Edition Book Collection", 
-    description: "Complete set of first edition novels including classics from the early 20th century.",
-    currentBid: 1850,
-    startingBid: 800,
-    imageUrl: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=300&fit=crop&crop=center",
-    status: "live" as const,
-    endTime: "Ends in 45m",
-    bidCount: 12,
-    watchers: 67,
-  }
-];
+interface Auction {
+  id: string;
+  title: string;
+  description: string;
+  currentBid: number;
+  startingBid: number;
+  imageUrl: string;
+  status: 'live' | 'upcoming' | 'ended';
+  endTime: string;
+  bidCount: number;
+  watchers: number;
+  isWatched?: boolean;
+}
+
+interface Stats {
+  liveAuctions: number;
+  activeBidders: number;
+  totalBids: string;
+  successRate: string;
+}
 
 const Index = () => {
   const navigate = useNavigate();
+  const [featuredAuctions, setFeaturedAuctions] = useState<Auction[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    liveAuctions: 0,
+    activeBidders: 0,
+    totalBids: '$0',
+    successRate: '99.8%'
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    
+    try {
+      // Fetch live auctions count
+      const { data: liveAuctionsData, error: liveError } = await supabase
+        .from('auctions')
+        .select('id')
+        .eq('status', 'live');
+
+      // Fetch active bidders count (unique bidders in live auctions)
+      const { data: biddersData, error: biddersError } = await supabase
+        .from('bids')
+        .select('bidder_id, auction_id')
+        .in('auction_id', liveAuctionsData?.map(a => a.id) || []);
+
+      // Get unique bidders
+      const uniqueBidders = new Set(biddersData?.map(b => b.bidder_id) || []);
+
+      // Fetch all bids to calculate total value
+      const { data: allBidsData, error: bidsError } = await supabase
+        .from('bids')
+        .select('amount');
+
+      const totalBidsValue = allBidsData?.reduce((sum, bid) => sum + Number(bid.amount), 0) || 0;
+
+      // Fetch featured auctions
+      const { data: auctionsData, error: auctionsError } = await supabase
+        .from('auctions')
+        .select(`
+          *,
+          category:categories!category_id (
+            name,
+            slug
+          )
+        `)
+        .in('status', ['live', 'upcoming'])
+        .eq('is_featured', true)
+        .order('created_at', { ascending: false })
+        .limit(4);
+
+      if (liveError || biddersError || bidsError || auctionsError) {
+        console.error('Error fetching data:', { liveError, biddersError, bidsError, auctionsError });
+        return;
+      }
+
+      // Transform auction data
+      const transformedAuctions = (auctionsData || []).map((auction: any) => ({
+        id: auction.id,
+        title: auction.title,
+        description: auction.description,
+        currentBid: auction.current_bid || 0,
+        startingBid: auction.starting_bid,
+        imageUrl: auction.images?.[0] || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=300&fit=crop',
+        status: auction.status,
+        endTime: getTimeDisplay(auction),
+        bidCount: auction.total_bids || 0,
+        watchers: auction.total_watchers || 0,
+      }));
+
+      setFeaturedAuctions(transformedAuctions);
+      setStats({
+        liveAuctions: liveAuctionsData?.length || 0,
+        activeBidders: uniqueBidders.size,
+        totalBids: formatCurrency(totalBidsValue),
+        successRate: '99.8%' // This would require more complex calculation
+      });
+
+    } catch (error) {
+      console.error('Error fetching real-time data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTimeDisplay = (auction: any) => {
+    const now = new Date();
+    const startTime = new Date(auction.start_time);
+    const endTime = new Date(auction.end_time);
+
+    if (auction.status === 'upcoming') {
+      const diff = startTime.getTime() - now.getTime();
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      if (days > 0) return `Starts in ${days}d ${hours}h`;
+      return `Starts in ${hours}h`;
+    }
+
+    if (auction.status === 'live') {
+      const diff = endTime.getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 0) return `Ends in ${hours}h ${minutes}m`;
+      return `Ends in ${minutes}m`;
+    }
+
+    return 'Auction ended';
+  };
+
+  const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) {
+      return `$${(amount / 1000000).toFixed(1)}M`;
+    } else if (amount >= 1000) {
+      return `$${(amount / 1000).toFixed(1)}K`;
+    }
+    return `$${amount.toFixed(0)}`;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,25 +169,31 @@ const Index = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               <Card>
                 <CardContent className="p-6 text-center">
-                  <div className="text-3xl font-bold text-primary">24</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? '...' : stats.liveAuctions}
+                  </div>
                   <div className="text-sm text-muted-foreground">Live Auctions</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-6 text-center">
-                  <div className="text-3xl font-bold text-primary">156</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? '...' : stats.activeBidders}
+                  </div>
                   <div className="text-sm text-muted-foreground">Active Bidders</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-6 text-center">
-                  <div className="text-3xl font-bold text-primary">$2.4M</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? '...' : stats.totalBids}
+                  </div>
                   <div className="text-sm text-muted-foreground">Total Bids</div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-6 text-center">
-                  <div className="text-3xl font-bold text-primary">99.8%</div>
+                  <div className="text-3xl font-bold text-primary">{stats.successRate}</div>
                   <div className="text-sm text-muted-foreground">Success Rate</div>
                 </CardContent>
               </Card>
@@ -122,11 +221,34 @@ const Index = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredAuctions.map((auction) => (
-                <AuctionCard key={auction.id} {...auction} />
-              ))}
-            </div>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i} className="overflow-hidden">
+                    <div className="h-48 bg-muted animate-pulse" />
+                    <CardContent className="p-4">
+                      <div className="h-4 bg-muted rounded animate-pulse mb-2" />
+                      <div className="h-4 bg-muted rounded animate-pulse w-3/4 mb-4" />
+                      <div className="h-6 bg-muted rounded animate-pulse w-1/2" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : featuredAuctions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {featuredAuctions.map((auction) => (
+                  <AuctionCard key={auction.id} {...auction} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🏺</div>
+                <h3 className="text-xl font-semibold mb-2">No featured auctions available</h3>
+                <p className="text-muted-foreground">
+                  Featured auctions will appear here once they are added to the system
+                </p>
+              </div>
+            )}
 
             <div className="text-center mt-12">
               <Button variant="auction" size="lg" onClick={() => navigate('/auctions')}>
