@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Gavel, 
   MessageCircle, 
@@ -62,80 +63,131 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [activeUsers, setActiveUsers] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch initial auction data directly from Supabase
+  useEffect(() => {
+    const fetchAuctionData = async () => {
+      try {
+        const { data: auctionData, error } = await supabase
+          .from('auctions')
+          .select(`
+            *,
+            bids (
+              id,
+              amount,
+              created_at,
+              bidder:profiles!bidder_id (
+                full_name,
+                is_verified
+              )
+            )
+          `)
+          .eq('id', auctionId)
+          .single();
+
+        if (error) {
+          console.error('Error fetching auction:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load auction data",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setAuction(auctionData);
+        setBids(auctionData.bids?.sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ) || []);
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAuctionData();
+  }, [auctionId, toast]);
 
   useEffect(() => {
     if (!user || !auctionId) return;
 
-    // Connect to WebSocket
-    const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.supabase.co/functions/v1/auction-websocket`);
-    
-    websocket.onopen = () => {
-      setIsConnected(true);
-      setWs(websocket);
+    // Try to connect to WebSocket (optional enhancement)
+    try {
+      const websocket = new WebSocket(`wss://irnlrgnitkabszykuhxh.supabase.co/functions/v1/auction-websocket`);
       
-      // Join the auction room
-      websocket.send(JSON.stringify({
-        type: 'join_auction',
-        auctionId,
-        userId: user.id
-      }));
-    };
+      websocket.onopen = () => {
+        setIsConnected(true);
+        setWs(websocket);
+        
+        // Join the auction room
+        websocket.send(JSON.stringify({
+          type: 'join_auction',
+          auctionId,
+          userId: user.id
+        }));
+      };
 
-    websocket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      
-      switch (message.type) {
-        case 'auction_status':
-          setAuction(message.auction);
-          setBids(message.bids || []);
-          break;
-          
-        case 'new_bid':
-          setBids(prev => [message.bid, ...prev]);
-          setAuction(prev => prev ? {
-            ...prev,
-            current_bid: message.currentBid,
-            total_bids: prev.total_bids + 1
-          } : null);
-          
-          // Show bid notification
-          toast({
-            title: "New Bid!",
-            description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
-          });
-          break;
-          
-        case 'chat_message':
-          setChatMessages(prev => [...prev, message.message]);
-          break;
-          
-        case 'error':
-          toast({
-            title: "Error",
-            description: message.message,
-            variant: "destructive",
-          });
-          break;
-      }
-    };
+      websocket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        
+        switch (message.type) {
+          case 'auction_status':
+            setAuction(message.auction);
+            setBids(message.bids || []);
+            break;
+            
+          case 'new_bid':
+            setBids(prev => [message.bid, ...prev]);
+            setAuction(prev => prev ? {
+              ...prev,
+              current_bid: message.currentBid,
+              total_bids: prev.total_bids + 1
+            } : null);
+            
+            // Show bid notification
+            toast({
+              title: "New Bid!",
+              description: `$${message.bid.amount.toLocaleString()} by ${message.bid.bidder.full_name}`,
+            });
+            break;
+            
+          case 'chat_message':
+            setChatMessages(prev => [...prev, message.message]);
+            break;
+            
+          case 'error':
+            toast({
+              title: "Error",
+              description: message.message,
+              variant: "destructive",
+            });
+            break;
+        }
+      };
 
-    websocket.onclose = () => {
+      websocket.onclose = () => {
+        setIsConnected(false);
+        setWs(null);
+      };
+
+      websocket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setIsConnected(false);
+      };
+
+      return () => {
+        websocket.close();
+      };
+    } catch (error) {
+      console.error('WebSocket connection failed:', error);
       setIsConnected(false);
-      setWs(null);
-    };
-
-    websocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
-
-    return () => {
-      websocket.close();
-    };
+    }
   }, [user, auctionId, toast]);
 
-  const handlePlaceBid = () => {
-    if (!ws || !bidAmount || !auction) return;
+  const handlePlaceBid = async () => {
+    if (!bidAmount || !auction) return;
 
     const amount = parseFloat(bidAmount);
     const minimumBid = auction.current_bid + auction.bid_increment;
@@ -149,12 +201,78 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
       return;
     }
 
-    ws.send(JSON.stringify({
-      type: 'place_bid',
-      bidAmount: amount
-    }));
+    try {
+      // Try WebSocket first
+      if (ws && isConnected) {
+        ws.send(JSON.stringify({
+          type: 'place_bid',
+          bidAmount: amount
+        }));
+      } else {
+        // Fallback to direct Supabase call
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user?.id)
+          .single();
 
-    setBidAmount('');
+        if (!profile) {
+          toast({
+            title: "Error",
+            description: "User profile not found",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const { data: newBid, error } = await supabase
+          .from('bids')
+          .insert({
+            auction_id: auctionId,
+            bidder_id: profile.id,
+            amount: amount
+          })
+          .select(`
+            *,
+            bidder:profiles!bidder_id (
+              full_name,
+              is_verified
+            )
+          `)
+          .single();
+
+        if (error) {
+          toast({
+            title: "Error",
+            description: "Failed to place bid",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Update local state
+        setBids(prev => [newBid, ...prev]);
+        setAuction(prev => prev ? {
+          ...prev,
+          current_bid: amount,
+          total_bids: prev.total_bids + 1
+        } : null);
+
+        toast({
+          title: "Bid Placed!",
+          description: `Your bid of $${amount.toLocaleString()} has been placed`,
+        });
+      }
+
+      setBidAmount('');
+    } catch (error) {
+      console.error('Error placing bid:', error);
+      toast({
+        title: "Error",
+        description: "Failed to place bid",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSendMessage = () => {
@@ -184,10 +302,22 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     return `${seconds}s`;
   };
 
-  if (!auction) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!auction) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Auction Not Found</h3>
+          <p className="text-muted-foreground">This auction could not be loaded.</p>
+        </div>
       </div>
     );
   }
@@ -273,7 +403,7 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               </div>
               <Button 
                 onClick={handlePlaceBid}
-                disabled={!isConnected || !bidAmount}
+                disabled={!bidAmount}
                 variant="bid"
                 className="min-w-32"
               >
