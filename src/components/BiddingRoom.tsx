@@ -41,6 +41,7 @@ interface Auction {
   id: string;
   title: string;
   current_bid: number;
+  starting_bid: number;
   bid_increment: number;
   end_time: string;
   total_bids: number;
@@ -272,7 +273,9 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
     if (!bidAmount || !auction) return;
 
     const amount = parseFloat(bidAmount);
-    const minimumBid = auction.current_bid + auction.bid_increment;
+    const minimumBid = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000 
+      ? auction.starting_bid 
+      : auction.current_bid + auction.bid_increment;
 
     if (amount < minimumBid) {
       toast({
@@ -507,8 +510,16 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                   type="number"
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
-                  placeholder={`Min: $${(auction.current_bid + auction.bid_increment).toLocaleString()}`}
-                  min={auction.current_bid + auction.bid_increment}
+                    placeholder={
+                      auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
+                        ? `Min: $${auction.starting_bid.toLocaleString()}`
+                        : `Min: $${(auction.current_bid + auction.bid_increment).toLocaleString()}`
+                    }
+                    min={
+                      auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
+                        ? auction.starting_bid
+                        : auction.current_bid + auction.bid_increment
+                    }
                   step={auction.bid_increment}
                 />
               </div>
@@ -523,17 +534,22 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               </Button>
             </div>
             
-            <div className="flex space-x-2 mt-4">
-              {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => (
-                <Button
-                  key={increment}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBidAmount((auction.current_bid + increment).toString())}
-                >
-                  +${increment}
-                </Button>
-              ))}
+              <div className="flex flex-wrap gap-2">
+                {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => {
+                  const baseAmount = auction.current_bid === 0 || auction.current_bid > auction.starting_bid + 1000000
+                    ? auction.starting_bid
+                    : auction.current_bid;
+                  return (
+                    <Button
+                      key={increment}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBidAmount((baseAmount + increment).toString())}
+                    >
+                      +${increment}
+                    </Button>
+                  );
+                })}
             </div>
           </CardContent>
         </Card>

@@ -160,7 +160,7 @@ serve(async (req) => {
           // Validate bid amount
           const { data: currentAuction } = await supabase
             .from('auctions')
-            .select('current_bid, bid_increment, status')
+            .select('current_bid, starting_bid, bid_increment, status, total_bids')
             .eq('id', auctionId)
             .single();
 
@@ -172,7 +172,9 @@ serve(async (req) => {
             return;
           }
 
-          const minimumBid = currentAuction.current_bid + currentAuction.bid_increment;
+          const minimumBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000
+            ? currentAuction.starting_bid
+            : currentAuction.current_bid + currentAuction.bid_increment;
           
           if (bidAmount < minimumBid) {
             socket.send(JSON.stringify({
@@ -208,12 +210,16 @@ serve(async (req) => {
             return;
           }
 
-          // Update auction current_bid
+          // Update auction current_bid (only if it's a valid increase)
+          const newCurrentBid = currentAuction.current_bid === 0 || currentAuction.current_bid > 1000000 
+            ? bidAmount 
+            : Math.max(bidAmount, currentAuction.current_bid);
+            
           const { error: updateError } = await supabase
             .from('auctions')
             .update({ 
-              current_bid: bidAmount,
-              total_bids: currentAuction.total_bids ? currentAuction.total_bids + 1 : 1
+              current_bid: newCurrentBid,
+              total_bids: (currentAuction.total_bids || 0) + 1
             })
             .eq('id', auctionId);
 
@@ -226,7 +232,7 @@ serve(async (req) => {
           broadcastToRoom(auctionId, {
             type: "new_bid",
             bid: newBid,
-            currentBid: bidAmount
+            currentBid: newCurrentBid
           });
 
           break;
