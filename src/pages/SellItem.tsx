@@ -12,7 +12,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Calendar, DollarSign, AlertCircle, ImagePlus } from 'lucide-react';
+import { Upload, Calendar, DollarSign, AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface Category {
@@ -42,6 +42,9 @@ const SellItem = () => {
     shippingCost: '',
     isAnonymous: false
   });
+  const [images, setImages] = useState<File[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
     fetchCategories();
@@ -62,6 +65,36 @@ const SellItem = () => {
     setCategories(data || []);
   };
 
+  const uploadImages = async (userId: string) => {
+    const uploadedUrls: string[] = [];
+    
+    for (let i = 0; i < images.length; i++) {
+      const file = images[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${userId}/${Date.now()}-${i}.${fileExt}`;
+      
+      setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
+      
+      const { data, error } = await supabase.storage
+        .from('auction-images')
+        .upload(fileName, file);
+      
+      if (error) {
+        console.error('Error uploading image:', error);
+        continue;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('auction-images')
+        .getPublicUrl(fileName);
+      
+      uploadedUrls.push(publicUrl);
+      setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
+    }
+    
+    return uploadedUrls;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -79,6 +112,9 @@ const SellItem = () => {
       if (!profile) {
         throw new Error('Profile not found');
       }
+
+      // Upload images first
+      const uploadedImageUrls = await uploadImages(user.id);
 
       // Create auction
       const { data: auction, error: auctionError } = await supabase
@@ -98,6 +134,7 @@ const SellItem = () => {
           weight: formData.weight,
           shipping_cost: formData.shippingCost ? parseFloat(formData.shippingCost) : null,
           is_anonymous_seller: formData.isAnonymous,
+          images: uploadedImageUrls,
           status: 'upcoming'
         })
         .select()
@@ -129,6 +166,34 @@ const SellItem = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + images.length > 5) {
+      toast({
+        title: "Too many images",
+        description: "You can upload a maximum of 5 images",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setImages(prev => [...prev, ...files]);
+    
+    // Create preview URLs
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImageUrls(prev => [...prev, e.target?.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setImageUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   // Set minimum dates for auction timing
@@ -246,15 +311,54 @@ const SellItem = () => {
                 <CardHeader>
                   <CardTitle>Images</CardTitle>
                   <CardDescription>
-                    Upload high-quality images of your item (coming soon)
+                    Upload high-quality images of your item (up to 5 images)
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="border-2 border-dashed border-muted rounded-lg p-8 text-center">
-                    <ImagePlus className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-2">Image upload functionality coming soon</p>
-                    <p className="text-sm text-muted-foreground">For now, auctions will use placeholder images</p>
+                <CardContent className="space-y-4">
+                  <div className="border-2 border-dashed border-muted rounded-lg p-6">
+                    <div className="text-center">
+                      <ImagePlus className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <div className="space-y-2">
+                        <Label htmlFor="images" className="text-sm font-medium cursor-pointer">
+                          Click to upload images
+                        </Label>
+                        <Input
+                          id="images"
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, JPEG up to 10MB each. Maximum 5 images.
+                        </p>
+                      </div>
+                    </div>
                   </div>
+                  
+                  {imageUrls.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {imageUrls.map((url, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={url}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-24 object-cover rounded-lg border"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => removeImage(index)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

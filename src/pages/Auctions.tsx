@@ -8,6 +8,7 @@ import { Header } from '@/components/Header';
 import { AuctionCard } from '@/components/AuctionCard';
 import { supabase } from '@/integrations/supabase/client';
 import { Search, Filter, SortDesc, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 interface Auction {
   id: string;
@@ -33,11 +34,12 @@ interface Category {
 }
 
 const Auctions = () => {
+  const [searchParams] = useSearchParams();
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState(() => searchParams.get('category') || 'all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'live' | 'upcoming' | 'ended' | 'draft' | 'cancelled'>('all');
   const [sortBy, setSortBy] = useState('end_time');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
