@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -264,13 +265,12 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
 
     const amount = parseFloat(bidAmount);
     
-    // Get the actual highest bid amount from the bids array
-    const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
-    const minimumRequired = highestBidAmount > 0 ? highestBidAmount : auction.starting_bid;
+    // Handle case where there are no bids (reset state)
+    const minimumRequired = auction.current_bid > 0 ? auction.current_bid : auction.starting_bid;
 
     if (amount <= minimumRequired) {
-      const errorMessage = highestBidAmount > 0
-        ? `Bid must be greater than current highest bid of $${highestBidAmount.toLocaleString()}`
+      const errorMessage = auction.current_bid > 0
+        ? `Bid must be greater than current highest bid of $${auction.current_bid.toLocaleString()}`
         : `First bid must be greater than starting bid of $${auction.starting_bid.toLocaleString()}`;
       toast({
         title: "Invalid Bid",
@@ -504,15 +504,13 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
                   type="number"
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
-                    placeholder={(() => {
-                      const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
-                      const minBid = highestBidAmount > 0 ? highestBidAmount + auction.bid_increment : auction.starting_bid;
-                      return `Min: $${minBid.toLocaleString()}`;
-                    })()}
-                    min={(() => {
-                      const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
-                      return highestBidAmount > 0 ? highestBidAmount + auction.bid_increment : auction.starting_bid;
-                    })()}
+                  placeholder={(() => {
+                    const minBid = auction.current_bid > 0 ? auction.current_bid + auction.bid_increment : auction.starting_bid;
+                    return `Min: $${minBid.toLocaleString()}`;
+                  })()}
+                  min={(() => {
+                    return auction.current_bid > 0 ? auction.current_bid + auction.bid_increment : auction.starting_bid;
+                  })()}
                   step={auction.bid_increment}
                 />
               </div>
@@ -527,21 +525,20 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
               </Button>
             </div>
             
-              <div className="flex flex-wrap gap-2">
-                {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => {
-                  const highestBidAmount = bids.length > 0 ? Math.max(...bids.map(bid => bid.amount)) : 0;
-                  const baseAmount = highestBidAmount > 0 ? highestBidAmount : auction.starting_bid;
-                  return (
-                    <Button
-                      key={increment}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setBidAmount((baseAmount + increment).toString())}
-                    >
-                      +${increment}
-                    </Button>
-                  );
-                })}
+            <div className="flex flex-wrap gap-2 mt-4">
+              {[auction.bid_increment, auction.bid_increment * 2, auction.bid_increment * 5].map((increment) => {
+                const baseAmount = auction.current_bid > 0 ? auction.current_bid : auction.starting_bid;
+                return (
+                  <Button
+                    key={increment}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBidAmount((baseAmount + increment).toString())}
+                  >
+                    +${increment}
+                  </Button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -554,29 +551,37 @@ export const BiddingRoom = ({ auctionId }: BiddingRoomProps) => {
           <CardContent>
             <ScrollArea className="h-64">
               <div className="space-y-2">
-                {bids.map((bid, index) => (
-                  <div key={bid.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={index === 0 ? "default" : "secondary"}>
-                        #{bids.length - index}
-                      </Badge>
-                      <span className="font-medium">
-                        {bid.bidder.full_name}
-                        {bid.bidder.is_verified && (
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            ✓
-                          </Badge>
-                        )}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">${bid.amount.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(bid.created_at).toLocaleTimeString()}
+                {bids.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    <p className="text-lg font-medium">No bids yet</p>
+                    <p className="text-sm">Be the first to place a bid!</p>
+                    <p className="text-sm mt-2">Starting bid: ${auction.starting_bid.toLocaleString()}</p>
+                  </div>
+                ) : (
+                  bids.map((bid, index) => (
+                    <div key={bid.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                      <div className="flex items-center space-x-2">
+                        <Badge variant={index === 0 ? "default" : "secondary"}>
+                          #{bids.length - index}
+                        </Badge>
+                        <span className="font-medium">
+                          {bid.bidder.full_name}
+                          {bid.bidder.is_verified && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              ✓
+                            </Badge>
+                          )}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold">${bid.amount.toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(bid.created_at).toLocaleTimeString()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
           </CardContent>
